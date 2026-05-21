@@ -44,7 +44,7 @@ from analysis import (
 
 
 # -------------------------------------------------------------------------
-# Metadata
+# Metadata Handling
 # -------------------------------------------------------------------------
 
 
@@ -217,7 +217,7 @@ def verify_metadata(source_path: str, output_path: str) -> tuple[str, str]:
 
 
 # -------------------------------------------------------------------------
-# Gain processing
+# Gain Processing
 # -------------------------------------------------------------------------
 
 
@@ -392,6 +392,7 @@ def process_audio_with_gain(
     source_info: dict[str, object],
     preserve_mtime: bool = False,
 ) -> dict[str, object]:
+    """Apply the requested gain with FFmpeg and return output stream metadata."""
     return apply_gain_ffmpeg(input_path, output_path, gain_db, source_info, preserve_mtime)
 
 
@@ -428,6 +429,11 @@ def verify_processed_audio_fast(
     row: TrackRow,
     output_path: str,
 ) -> tuple[str, str]:
+    """Compare the rendered file against the analysis expectations.
+
+    Updates the row with measured output loudness and peak values, then
+    returns a verification status plus any warning text.
+    """
     if not POST_VERIFY_PROCESSED_AUDIO:
         return "skipped", ""
 

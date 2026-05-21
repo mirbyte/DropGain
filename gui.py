@@ -97,7 +97,7 @@ enable_windows_dpi_awareness()
 
 
 # -------------------------------------------------------------------------
-# GUI
+# GUI Application
 # -------------------------------------------------------------------------
 
 
@@ -125,6 +125,8 @@ class GuiQueueLogHandler(logging.Handler):
 
 
 class App(tk.Tk):
+    """Desktop UI"""
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -331,7 +333,7 @@ class App(tk.Tk):
         self._logger.handlers.clear()
 
     # -------------------------------------------------------------------------
-    # UI
+    # UI Construction
     # -------------------------------------------------------------------------
 
     def _build_ui(self) -> None:
@@ -497,7 +499,7 @@ class App(tk.Tk):
         ).grid(row=1, column=1, sticky="w", padx=(8, 4), pady=(6,0))
         ttk.Label(bass_frame, text="(0=ignore bass, 1=full compensation)").grid(row=1, column=2, sticky="w", padx=(8,0))
 
-        target_frame = ttk.LabelFrame(self, text="DJ drop loudness target", padding=10)
+        target_frame = ttk.LabelFrame(self, text="Drop loudness target", padding=10)
         target_frame.grid(row=4, column=0, sticky="ew", padx=12, pady=4)
 
         self.var_target_low = tk.DoubleVar(
@@ -648,7 +650,7 @@ class App(tk.Tk):
         self._update_output_controls()
 
     # -------------------------------------------------------------------------
-    # UI helpers
+    # UI Helpers
     # -------------------------------------------------------------------------
 
     def _update_output_controls(self) -> None:
@@ -702,7 +704,7 @@ class App(tk.Tk):
         self._update_output_controls()
 
     # -------------------------------------------------------------------------
-    # Run
+    # Run Control
     # -------------------------------------------------------------------------
 
     def _start_processing(self) -> None:
@@ -853,7 +855,7 @@ class App(tk.Tk):
         self.var_status.set("Cancelling after current file(s) finish...")
 
     # -------------------------------------------------------------------------
-    # Worker
+    # Background Worker
     # -------------------------------------------------------------------------
 
     def _run_safely(
@@ -1162,7 +1164,7 @@ class App(tk.Tk):
         q.put(("finished", None))
 
     # -------------------------------------------------------------------------
-    # Queue polling
+    # Queue Polling
     # -------------------------------------------------------------------------
 
     def _poll_queue(self) -> None:

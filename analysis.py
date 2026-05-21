@@ -20,7 +20,7 @@ except ImportError as exc:
 
 
 # -------------------------------------------------------------------------
-# Configuration
+# Configuration Constants
 # -------------------------------------------------------------------------
 
 APP_TITLE = "DropGain"
@@ -58,7 +58,7 @@ DEFAULT_MAX_BOOST_DB = 4.5
 DEFAULT_PEAK_CEILING_DBFS = -1.0
 DEFAULT_BOOST_PEAK_CEILING_DBFS = DEFAULT_PEAK_CEILING_DBFS
 
-# Expected bass dBFS minus drop LUFS for a balanced track; nod scales deviation into LUFS.
+# Expected bass-vs-LUFS offset for a balanced drop; sensitivity converts deviation into a LUFS adjustment.
 DEFAULT_BASS_BASE_RATIO = 4.0
 DEFAULT_BASS_NOD_SENSITIVITY = 0.25
 
@@ -180,7 +180,7 @@ class TrackRow(TypedDict):
 
 
 # -------------------------------------------------------------------------
-# Paths and helpers
+# Path Helpers
 # -------------------------------------------------------------------------
 
 
@@ -325,7 +325,7 @@ def find_audio_files(root_dir: str) -> list[str]:
 
 
 # -------------------------------------------------------------------------
-# Audio analysis
+# Audio Analysis
 # -------------------------------------------------------------------------
 
 
@@ -534,7 +534,7 @@ def measure_lufs(meter: pyln.Meter, audio: np.ndarray) -> float:
 def measure_bass_level(
     audio: np.ndarray, sample_rate: int, cutoff_hz: float = 150.0
 ) -> float:
-    """RMS level (dBFS) of content below cutoff_hz."""
+    """Return the RMS level in dBFS for content below ``cutoff_hz``."""
     if audio.size == 0:
         return -999.0
 
@@ -576,6 +576,7 @@ def loudest_section_lufs(
     window_seconds: float,
     hop_seconds: float,
 ) -> tuple[float, float, float]:
+    """Return the loudest measured window and its start/end times in seconds."""
     sample_count = audio.shape[0]
 
     window_samples = int(round(window_seconds * METER_SAMPLE_RATE))
@@ -631,6 +632,12 @@ def calculate_gain_suggestion(
     bass_base_ratio: float,
     bass_nod_sensitivity: float,
 ) -> tuple[float, float, str, str]:
+    """Compute the recommended gain change for the analyzed drop section.
+
+    Balances the target LUFS window against peak headroom and the optional
+    bass-based LUFS adjustment, then returns the raw gain, applied gain,
+    action label, and any decision notes.
+    """
     notes: list[str] = []
 
     actual_bass_ratio = drop_bass_dbfs - loudest_lufs
@@ -689,6 +696,7 @@ def analyze_file(
     output_root: str | None = None,
     source_root: str | None = None,
 ) -> TrackRow:
+    """Analyze one audio file and build the corresponding report row."""
     p = Path(path)
     ext = p.suffix.lower()
 
@@ -797,7 +805,7 @@ def analyze_file(
 
 
 # -------------------------------------------------------------------------
-# Summary
+# Summary Reporting
 # -------------------------------------------------------------------------
 
 
