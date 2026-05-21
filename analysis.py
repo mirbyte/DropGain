@@ -816,7 +816,7 @@ def build_summary(rows: list[TrackRow]) -> str:
     total_tracks = len(rows)
     actions: dict[str, int] = {}
     statuses: dict[str, int] = {}
-    
+
     gains: list[float] = []
 
     for r in rows:
@@ -853,7 +853,7 @@ def build_summary(rows: list[TrackRow]) -> str:
     lines.append("File Processing Status:")
     for status, count in sorted(statuses.items()):
         lines.append(f"  {status:<16} : {count} files")
-        
+
     lines.append("------------------------------------------------------------------------------")
     lines.append(f"Config: Target Window={DEFAULT_LOUD_SECTION_WINDOW_SECONDS}s | Suffix={PROCESSED_SUFFIX}")
     lines.append("==============================================================================")
