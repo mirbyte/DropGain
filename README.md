@@ -11,11 +11,11 @@ EDM-oriented drop loudness normalization for DJ libraries. Analyzes each track�
 - **Tested platform:** **Windows only** (by the author so far)
 - **macOS / Linux:** may work in theory (Python + Tkinter + FFmpeg), but **not tested**
 - **Always** try on a **copy** of your library first; even if originals are never modified
-- Processed files use the `_dropgain` suffix
+- Processed files use the `_DG` suffix
 
 ## What it does
 
-- Scans a folder recursively for **FLAC**, **MP3**, and **WAV**
+- Scans a folder recursively for **FLAC**, **MP3**, **WAV**, and **AIFF**
 - Measures integrated LUFS and finds the **loudest sliding window** (default 30 s window, 10 s hop)
 - Applies a subtle **bass-aware** adjustment so sub-heavy drops are not over- or under-corrected vs lean tracks
 - Suggests **Raise**, **Lower**, or **Keep** based on a no-touch LUFS band (default **-7.0 to -6.0 LUFS** on the drop)
@@ -65,7 +65,7 @@ python main.py
 2. Set **Corrected copies** to next to originals or a custom output folder.
 3. Adjust targets and analysis settings if needed (defaults suit typical EDM drops).
 4. **Analyze Only** — dry run, summary popup, no files written.
-5. **Analyze + Create Copies** — writes `*_dropgain.*` files when gain exceeds thresholds.
+5. **Analyze + Create Copies** — writes `*_DG.*` files when gain exceeds thresholds.
 
 Settings are saved to `dropgain_settings.json` next to the app (see `.gitignore`).
 
@@ -73,10 +73,10 @@ Settings are saved to `dropgain_settings.json` next to the app (see `.gitignore`
 
 | Format | Behavior |
 |--------|----------|
-| FLAC / WAV | Lossless re-encode with gain when \|gain\| ≥ lossless threshold (default **0.15 dB**) |
+| FLAC / WAV / AIFF | Lossless re-encode with gain when \|gain\| ≥ lossless threshold (default **0.15 dB**) |
 | MP3 | Re-encoded at **320k CBR** only when \|gain\| ≥ MP3 threshold (default **1.00 dB**) |
 
-Existing `_dropgain` outputs are skipped during scans. The tool does not overwrite existing outputs unless you change `PROCESS_OVERWRITE_EXISTING` in `analysis.py`.
+Existing `_DG` outputs are skipped during scans. The tool does not overwrite existing outputs unless you change `PROCESS_OVERWRITE_EXISTING` in `analysis.py`.
 
 ## Default processing behavior
 

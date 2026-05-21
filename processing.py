@@ -184,6 +184,41 @@ def verify_wav_metadata(source_path: str, output_path: str) -> list[str]:
     return problems
 
 
+def copy_aiff_metadata_best_effort(source_path: str, output_path: str) -> None:
+    try:
+        source_tags = ID3(source_path)
+    except ID3NoHeaderError:
+        return
+
+    source_tags.save(output_path, v2_version=MP3_ID3_VERSION)
+
+
+def verify_aiff_metadata(source_path: str, output_path: str) -> list[str]:
+    problems: list[str] = []
+
+    try:
+        source_tags = ID3(source_path)
+    except ID3NoHeaderError:
+        return problems
+
+    try:
+        output_tags = ID3(output_path)
+    except ID3NoHeaderError:
+        return ["missing ID3 tag"]
+
+    source_keys = set(source_tags.keys())
+    output_keys = set(output_tags.keys())
+
+    missing = sorted(source_keys - output_keys)
+    for key in missing[:20]:
+        problems.append(f"missing AIFF ID3 frame {key}")
+
+    if len(missing) > 20:
+        problems.append(f"{len(missing) - 20} more AIFF ID3 frames missing")
+
+    return problems
+
+
 def copy_metadata_exact(source_path: str, output_path: str) -> None:
     ext = Path(source_path).suffix.lower()
 
@@ -193,6 +228,8 @@ def copy_metadata_exact(source_path: str, output_path: str) -> None:
         copy_mp3_metadata_exact(source_path, output_path)
     elif ext == ".wav":
         copy_wav_metadata_best_effort(source_path, output_path)
+    elif ext == ".aiff":
+        copy_aiff_metadata_best_effort(source_path, output_path)
 
 
 def verify_metadata(source_path: str, output_path: str) -> tuple[str, str]:
@@ -205,6 +242,8 @@ def verify_metadata(source_path: str, output_path: str) -> tuple[str, str]:
             problems = verify_mp3_metadata(source_path, output_path)
         elif ext == ".wav":
             problems = verify_wav_metadata(source_path, output_path)
+        elif ext == ".aiff":
+            problems = verify_aiff_metadata(source_path, output_path)
         else:
             problems = []
     except Exception as exc:
@@ -257,6 +296,12 @@ def encoder_args_for_output(ext: str, source_info: dict[str, object]) -> list[st
             wav_codec_to_use(source_info),
         ]
 
+    if ext == ".aiff":
+        return [
+            "-c:a",
+            "pcm_s16be",
+        ]
+
     raise RuntimeError(f"processing not supported for {ext}")
 
 
@@ -268,7 +313,7 @@ def verify_lossless_output(
 ) -> None:
     ext = Path(input_path).suffix.lower()
 
-    if ext not in {".flac", ".wav"}:
+    if ext not in {".flac", ".wav", ".aiff"}:
         return
 
     problems: list[str] = []

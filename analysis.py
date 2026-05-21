@@ -27,9 +27,9 @@ APP_TITLE = "DropGain"
 
 METER_SAMPLE_RATE = 48_000
 
-PROCESSED_SUFFIX = "_dropgain"
+PROCESSED_SUFFIX = "_DG"
 
-SUPPORTED_EXTENSIONS = {".flac", ".mp3", ".wav"}
+SUPPORTED_EXTENSIONS = {".flac", ".mp3", ".wav", ".aiff"}
 
 SKIP_ALREADY_PROCESSED_FILES_IN_SCAN = True
 PROCESS_OVERWRITE_EXISTING = False
@@ -296,7 +296,7 @@ def min_abs_gain_for_extension(ext: str, lossless_threshold: float, mp3_threshol
     ext = ext.lower()
     if ext == ".mp3":
         return mp3_threshold
-    if ext in {".flac", ".wav"}:
+    if ext in {".flac", ".wav", ".aiff"}:
         return lossless_threshold
     return lossless_threshold
 
