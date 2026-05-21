@@ -342,11 +342,11 @@ class App(tk.Tk):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(6, weight=1)
 
-        paths_frame = ttk.LabelFrame(self, text="Input / output", padding=10)
+        paths_frame = ttk.LabelFrame(self, text="Source and Output", padding=10)
         paths_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 4))
         paths_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(paths_frame, text="Music folder:").grid(row=0, column=0, sticky="w")
+        ttk.Label(paths_frame, text="Source directory:").grid(row=0, column=0, sticky="w")
         self.var_folder = tk.StringVar(value=str(settings.get("last_folder") or ""))
         ttk.Entry(paths_frame, textvariable=self.var_folder).grid(
             row=0, column=1, sticky="ew", padx=(8, 6)
@@ -360,7 +360,7 @@ class App(tk.Tk):
         self.var_output_mode = tk.StringVar(value=output_mode)
         self.var_output_folder = tk.StringVar(value=str(settings.get("output_folder") or ""))
 
-        ttk.Label(paths_frame, text="Corrected copies:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(paths_frame, text="Output location:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.output_mode_combo = ttk.Combobox(
             paths_frame,
             textvariable=self.var_output_mode,
@@ -404,7 +404,7 @@ class App(tk.Tk):
             value=self._setting_int(settings, "workers", DEFAULT_WORKER_THREADS)
         )
 
-        ttk.Label(analysis_frame, text="Loud section window:").grid(row=0, column=0, sticky="w")
+        ttk.Label(analysis_frame, text="Analysis window:").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(
             analysis_frame,
             from_=MIN_LOUD_SECTION_WINDOW_SECONDS,
@@ -415,7 +415,7 @@ class App(tk.Tk):
         ).grid(row=0, column=1, sticky="w", padx=(8, 16))
         ttk.Label(analysis_frame, text="sec").grid(row=0, column=2, sticky="w")
 
-        ttk.Label(analysis_frame, text="Hop:").grid(row=0, column=3, sticky="w", padx=(24, 0))
+        ttk.Label(analysis_frame, text="Hop size:").grid(row=0, column=3, sticky="w", padx=(24, 0))
         ttk.Spinbox(
             analysis_frame,
             from_=MIN_LOUD_SECTION_HOP_SECONDS,
@@ -426,7 +426,7 @@ class App(tk.Tk):
         ).grid(row=0, column=4, sticky="w", padx=(8, 16))
         ttk.Label(analysis_frame, text="sec").grid(row=0, column=5, sticky="w")
 
-        ttk.Label(analysis_frame, text="Threads:").grid(row=0, column=6, sticky="w", padx=(24, 0))
+        ttk.Label(analysis_frame, text="Worker threads:").grid(row=0, column=6, sticky="w", padx=(24, 0))
         ttk.Spinbox(
             analysis_frame,
             from_=MIN_WORKER_THREADS,
@@ -465,9 +465,9 @@ class App(tk.Tk):
             textvariable=self.var_mp3_threshold,
             width=7,
         ).grid(row=0, column=4, sticky="w", padx=(8, 4))
-        ttk.Label(threshold_frame, text="dB (higher = fewer re-encodes)").grid(row=0, column=5, sticky="w")
+        ttk.Label(threshold_frame, text="dB (higher threshold = fewer re-encodes)").grid(row=0, column=5, sticky="w")
 
-        bass_frame = ttk.LabelFrame(self, text="Bass adaptation", padding=10)
+        bass_frame = ttk.LabelFrame(self, text="Bass compensation", padding=10)
         bass_frame.grid(row=3, column=0, sticky="ew", padx=12, pady=4)
 
         self.var_bass_base_ratio = tk.DoubleVar(
@@ -477,7 +477,7 @@ class App(tk.Tk):
             value=self._setting_float(settings, "bass_nod_sensitivity", DEFAULT_BASS_NOD_SENSITIVITY)
         )
 
-        ttk.Label(bass_frame, text="Bass base ratio (dB):").grid(row=0, column=0, sticky="w")
+        ttk.Label(bass_frame, text="Bass offset (dB):").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(
             bass_frame,
             from_=0.0,
@@ -488,7 +488,7 @@ class App(tk.Tk):
         ).grid(row=0, column=1, sticky="w", padx=(8, 4))
         ttk.Label(bass_frame, text="(expected bass - LUFS)").grid(row=0, column=2, sticky="w", padx=(8,0))
 
-        ttk.Label(bass_frame, text="Bass nod sensitivity:").grid(row=1, column=0, sticky="w", pady=(6,0))
+        ttk.Label(bass_frame, text="Bass sensitivity:").grid(row=1, column=0, sticky="w", pady=(6,0))
         ttk.Spinbox(
             bass_frame,
             from_=0.0,
@@ -497,7 +497,7 @@ class App(tk.Tk):
             textvariable=self.var_bass_nod_sensitivity,
             width=7,
         ).grid(row=1, column=1, sticky="w", padx=(8, 4), pady=(6,0))
-        ttk.Label(bass_frame, text="(0=ignore bass, 1=full compensation)").grid(row=1, column=2, sticky="w", padx=(8,0))
+        ttk.Label(bass_frame, text="(0.0 = disabled, 1.0 = full)").grid(row=1, column=2, sticky="w", padx=(8,0))
 
         target_frame = ttk.LabelFrame(self, text="Drop loudness target", padding=10)
         target_frame.grid(row=4, column=0, sticky="ew", padx=12, pady=4)
@@ -518,7 +518,7 @@ class App(tk.Tk):
             value=self._setting_bool(settings, "preserve_mtime", False)
         )
 
-        ttk.Label(target_frame, text="No-touch low:").grid(row=0, column=0, sticky="w")
+        ttk.Label(target_frame, text="Target low:").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(
             target_frame,
             from_=-20.0,
@@ -529,7 +529,7 @@ class App(tk.Tk):
         ).grid(row=0, column=1, sticky="w", padx=(8, 4))
         ttk.Label(target_frame, text="LUFS").grid(row=0, column=2, sticky="w")
 
-        ttk.Label(target_frame, text="No-touch high:").grid(row=0, column=3, sticky="w", padx=(20, 0))
+        ttk.Label(target_frame, text="Target high:").grid(row=0, column=3, sticky="w", padx=(20, 0))
         ttk.Spinbox(
             target_frame,
             from_=-20.0,
@@ -551,7 +551,7 @@ class App(tk.Tk):
         ).grid(row=1, column=1, sticky="w", padx=(8, 4), pady=(8, 0))
         ttk.Label(target_frame, text="dB").grid(row=1, column=2, sticky="w", pady=(8, 0))
 
-        ttk.Label(target_frame, text="Peak reference:").grid(
+        ttk.Label(target_frame, text="Peak ceiling:").grid(
             row=1,
             column=3,
             sticky="w",
@@ -578,7 +578,7 @@ class App(tk.Tk):
             target_frame,
             text=(
                 f"Defaults: target {DEFAULT_TARGET_LOW_LUFS:.1f} to {DEFAULT_TARGET_HIGH_LUFS:.1f} LUFS. "
-                f"Peak reference caps gain to avoid clipping; dynamics preserved (no limiting)."
+                f"Peak ceiling caps gain to avoid clipping; dynamics preserved (no limiting)."
             ),
             foreground="gray",
         ).grid(row=3, column=0, columnspan=6, sticky="w", pady=(10, 0))
@@ -588,14 +588,14 @@ class App(tk.Tk):
 
         self.btn_start = ttk.Button(
             buttons_frame,
-            text="Analyze + Create Copies",
+            text="Analyze and Process",
             command=self._start_processing,
         )
         self.btn_start.pack(side="left", padx=(0, 8))
 
         self.btn_analyze_only = ttk.Button(
             buttons_frame,
-            text="Analyze Only",
+            text="Analysis Only",
             command=self._start_analyze_only,
         )
         self.btn_analyze_only.pack(side="left", padx=(0, 8))
@@ -615,7 +615,7 @@ class App(tk.Tk):
         self.progress = ttk.Progressbar(progress_frame, mode="determinate")
         self.progress.grid(row=0, column=0, sticky="ew", pady=(4, 2))
 
-        self.var_status = tk.StringVar(value="Ready. Originals are never overwritten.")
+        self.var_status = tk.StringVar(value="Ready. Source files are never modified.")
         ttk.Label(progress_frame, textvariable=self.var_status, foreground="gray").grid(
             row=1,
             column=0,
@@ -741,7 +741,7 @@ class App(tk.Tk):
         if target_low >= target_high:
             messagebox.showerror(
                 "Invalid target",
-                "No-touch low must be lower than no-touch high.\n\n"
+                "Target low must be lower than target high.\n\n"
                 "For example: low -7.0, high -6.0.",
             )
             return
@@ -807,13 +807,13 @@ class App(tk.Tk):
         self._logger.info("Post-render verify:   %s", POST_VERIFY_PROCESSED_AUDIO)
         self._logger.info("Preserve mtime:       %s", preserve_mtime)
         self._logger.info("Meter sample rate:    %s Hz", METER_SAMPLE_RATE)
-        self._logger.info("Loud section window:  %.1f sec", window_seconds)
-        self._logger.info("Hop:                  %.1f sec", hop_seconds)
-        self._logger.info("No-touch window:      %.1f to %.1f LUFS", target_low, target_high)
+        self._logger.info("Analysis window:      %.1f sec", window_seconds)
+        self._logger.info("Hop size:             %.1f sec", hop_seconds)
+        self._logger.info("Target window:        %.1f to %.1f LUFS", target_low, target_high)
         self._logger.info("Max positive boost:   %.1f dB", max_boost)
-        self._logger.info("Peak reference:       %.1f dBFS", peak_ceiling)
-        self._logger.info("Bass base ratio:      %.1f dB", bass_base_ratio)
-        self._logger.info("Bass nod sensitivity: %.2f", bass_nod_sensitivity)
+        self._logger.info("Peak ceiling:         %.1f dBFS", peak_ceiling)
+        self._logger.info("Bass offset:          %.1f dB", bass_base_ratio)
+        self._logger.info("Bass sensitivity:     %.2f", bass_nod_sensitivity)
         self._logger.info("Processing:           Pure gain via FFmpeg (preserves dynamics; no limiting or clipping)")
         self._logger.info("Threads:              %s", workers)
         self._logger.info("-" * 78)
