@@ -15,6 +15,19 @@ EDM- and DJ-library oriented section loudness normalization. DropGain analyzes e
 - Always try on a **copy** of your library first
 - Processed files use the `_DG` suffix; originals are not modified
 
+### Track length and memory
+
+Analysis and rendering currently load each file fully into memory; there is no chunked or streaming processing yet.
+
+**Tracks longer than about 10 minutes** may cause high RAM use, long hangs, or the app or process to crash, especially with multiple analysis workers or during batch render plus verification.
+
+If you work with long material:
+
+- Split files before processing
+- Lower **Analysis workers** in Preferences on machines with limited RAM
+- Expect slower runs; monitor system memory during large batches
+- Wait for updates
+
 ## What it does
 
 **Library analysis**  
