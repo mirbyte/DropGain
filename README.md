@@ -189,30 +189,6 @@ Re-decode; compare section LUFS and dBTP to projections (tolerance 0.4 LU / 0.2 
 
 Gain is reduced rather than exceeding `max_reduction`. Heavy limiting is reported, not applied beyond the configured budget.
 
-### Code layout
-
-| Module | Role |
-|--------|------|
-| `main.pyw` | Entry point |
-| `gui_tk.py` | Main window, threading, waveform, run orchestration |
-| `gui_process.py` | Process page: folder, table, log |
-| `gui_settings.py` | Preferences, dependency checks |
-| `gui_library_tuning.py` | Library profile, recommendations |
-| `analysis.py` | Measurement, gain logic, discovery, CSV schema |
-| `processing.py` | Render paths, Pro-L 2 host, metadata |
-| `jobs.py` | Analyze / render / batch jobs, worker pools |
-| `optimizer.py` | Library profiling, settings recommendations |
-
-UI invokes `jobs.py`; work runs on background threads with queue-based progress.
-
-### Dependencies
-
-- **FFmpeg / ffprobe** - on `PATH`
-- **FabFilter Pro-L 2** (VST3) - limiter-assisted path via `pedalboard`; `PROL2_PLUGIN_PATH` or auto-discovery
-- **Python** - `customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`
-
-Launch `main.pyw`. **Preferences → Check Pro-L 2 / System** validates the toolchain before batch render.
-
 ## Operation
 
 1. Set **Source folder**.
@@ -239,3 +215,27 @@ Disable auto gain (or equivalent) in whatever software you use with `_DG` export
 **Engine DJ** (standalone players) generally has no auto-gain on playback; level is set with hardware trim. Pre-leveled `_DG` files are usually fine there without an extra preference change.
 
 Load the `_DG` copies (or your configured output folder) into the library you actually play from, not the unprocessed originals, when you want the normalized level on the decks.
+
+### Dependencies
+
+- **FFmpeg / ffprobe** - on `PATH`
+- **FabFilter Pro-L 2** (VST3) - limiter-assisted path via `pedalboard`; `PROL2_PLUGIN_PATH` or auto-discovery
+- **Python** - `customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`
+
+Launch `main.pyw`. **Preferences → Check Pro-L 2 / System** validates the toolchain before batch render.
+
+### Code layout
+
+| Module | Role |
+|--------|------|
+| `main.pyw` | Entry point |
+| `gui_tk.py` | Main window, threading, waveform, run orchestration |
+| `gui_process.py` | Process page: folder, table, log |
+| `gui_settings.py` | Preferences, dependency checks |
+| `gui_library_tuning.py` | Library profile, recommendations |
+| `analysis.py` | Measurement, gain logic, discovery, CSV schema |
+| `processing.py` | Render paths, Pro-L 2 host, metadata |
+| `jobs.py` | Analyze / render / batch jobs, worker pools |
+| `optimizer.py` | Library profiling, settings recommendations |
+
+UI invokes `jobs.py`; work runs on background threads with queue-based progress.
