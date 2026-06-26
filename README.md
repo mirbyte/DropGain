@@ -8,7 +8,7 @@ EDM- and DJ-library oriented section loudness normalization. DropGain analyzes e
 
 ## Status
 
-**Still in active testing.** Behavior, defaults, and edge cases may change.
+**Still in active development.** Behavior, defaults, and edge cases will change.
 
 - **Tested platform:** Windows only (by the author so far)
 - **macOS / Linux:** may work (Python + Tkinter + FFmpeg), but not tested
