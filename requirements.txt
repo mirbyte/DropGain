@@ -1,0 +1,7 @@
+customtkinter>=5.2.2
+numpy>=2.1.0
+scipy>=1.14.0
+pyloudnorm>=0.2.0
+mutagen>=1.47.0
+pedalboard>=0.9.22
+Pillow>=11.0.0
