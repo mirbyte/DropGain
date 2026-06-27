@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+*.py text eol=lf
+*.pyw text eol=lf
+
+# Audio (DropGain)
+*.aif binary
+*.aiff binary
+*.flac binary
+*.m4a binary
+*.mp3 binary
+*.ogg binary
+*.wav binary
