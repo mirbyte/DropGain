@@ -285,3 +285,9 @@ Launch `main.pyw`. **Preferences → Check Pro-L 2 / System** validates the tool
 | `optimizer.py` | Library profiling, settings recommendations |
 
 UI invokes `jobs.py`; work runs on background threads with queue-based progress.
+
+<br>
+<br>
+
+<img width="3839" height="2019" alt="ui_launch" src="https://github.com/user-attachments/assets/7a5e8e2f-f977-4e23-8a14-55da47ea72a2" />
+
