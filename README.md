@@ -4,9 +4,7 @@
 
 *Loudness matching for the loudest part of the track, not the whole-file average.*
 
-EDM- and DJ-library oriented section loudness normalization. DropGain analyzes each track's loudest section, suggests gain to hit a target LUFS band under a true-peak ceiling, and optionally writes `_DG` copies alongside the sources.
-
-**Clean gain when possible:** linear gain only, no DSP, when the adjustment fits under the ceiling. Limiter-assisted mode uses FabFilter Pro-L 2 only when peak control is required.
+EDM- and DJ-library oriented section loudness normalization: analyze the loudest section, suggest gain for a target LUFS band under a true-peak ceiling, write `_DG` copies. Complements DJ software and commercial prep tools.
 
 ## Status
 
@@ -36,28 +34,36 @@ On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs 
 
 ## What it does
 
-**Library analysis**  
-Recursively scans supported files, decodes each track, and reports programme integrated LUFS, loudest-section LUFS (with section boundaries), sample peak, and oversampled true peak (dBTP). Each row includes suggested gain, projected post-gain metrics, peak-control estimate, and a processing action.
+- **Library analysis** - recursive scan; programme and section LUFS, dBTP, sample peak, suggested gain, projections, and processing action per row
+- **Section-based targeting** - loudest sliding window (default 20 s / 5 s hop); true-peak ceiling wins over LUFS when they conflict
+- **Clean gain or limiter-assisted** - linear gain when the ceiling allows; FabFilter Pro-L 2 with `max_reduction` cap when peak control is needed
+- **Bass-aware trim** - on positive gain only; low-band energy can reduce boost on bass-heavy sections
+- **`_DG` outputs** - copies beside sources or under a separate root; preserve format, force AIFF/MP3, or decode MP3 to AIFF to avoid double lossy encode
+- **Library Tuning** - profile the library; recommend targets, window/hop, thresholds, and ceiling
+- **Verification** - post-render re-measurement; loudness-normalization tags stripped; optional CSV (`dropgain_report.csv`) and session log
 
-**Section-based targeting**  
-Gain is derived from the loudest sliding window (default 20 s window, 5 s hop). A true-peak ceiling (default -1.0 dBTP) takes precedence over the LUFS target when the two conflict.
+## When DropGain makes sense (and when it doesn't)
 
-**Two processing modes**
+Narrower than most commercial library tools on purpose: level and peak control, not repair, color, or all-in-one templates.
 
-- **Clean gain** - linear gain only. Selected when the required adjustment fits under the true-peak ceiling without limiting.
-- **Limiter-assisted** - FabFilter Pro-L 2 applies gain with true-peak limiting when boost would exceed the ceiling. `max_reduction` sets the acceptable limiter depth; tracks requiring more gain reduction than the budget allows are flagged for review.
+**Consider DropGain if you:**
 
-**Bass-aware gain reduction**  
-On positive gain only, measured low-band energy (45–150 Hz and 20–45 Hz vs a 150–1000 Hz reference) can reduce the applied boost on bass-heavy programme material.
+- Want **section-based** loudness (drop/chorus), not whole-file average or playback-time trim
+- Want a defined **true-peak ceiling** (default -1.0 dBTP) with gain reduced when level and peak conflict
+- Want **auditable** per-track numbers (LUFS, dBTP, section boundaries, limiter estimate) before batch render
+- Want **portable** output that does not depend on one app's auto-gain database
+- Prefer a **minimal signal path**: linear gain when possible; limiting only when peak control is required
+- Value **inspectability**: open source code, tweakable defaults, no black-box batch chain
+- Are fine with a **work-in-progress** tool (see Status) and validating results on a library copy first
 
-**Processed outputs**  
-Eligible tracks render to `_DG` copies (adjacent to sources or under a separate output root, preserving relative paths). Output format may be preserved, forced to AIFF or MP3, or MP3 sources may be decoded to AIFF to avoid a second lossy generation.
+**Probably not for you if you:**
 
-**Library Tuning**  
-Profiles analyzed libraries (LUFS distribution, limiter severity, format mix) and recommends target band, analysis window/hop, gain thresholds, and peak ceiling. Preview projected render counts before applying recommendations.
+- Want one integrated app for library management, analysis, and decks with minimal setup
+- Want clipped-peak repair, warmth, saturation, or template-style enhancement without tuning
+- Need polished vendor support and broad cross-platform QA
+- Do not want to install FFmpeg, Python, or (for full peak-limited prep) FabFilter Pro-L 2
 
-**Verification**  
-Post-render re-measurement of LUFS and true peak against projections; metadata verification. ReplayGain, Sound Check, and R128 loudness tags are stripped from outputs to prevent downstream double normalization. Optional CSV report (`dropgain_report.csv`) and session log.
+Commercial DJ and prep tools are often the better fit for convenience, integration, and breadth. DropGain is an alternative when your workflow cares more about explicit targets, render-stage control, and a transparent path than about all-in-one polish.
 
 ## FAQ (nobody's asked yet lol)
 
@@ -69,79 +75,54 @@ Three reasons:
 2. **You want modern EDM-style masters** - limiter-assisted mode uses FabFilter Pro-L 2 with the Modern style when clean gain is not enough. That matches how a lot of current dance music is already mastered.
 3. **It is a deliberate choice** - limiter-assisted is the default because that is how I prep my own library. Clean gain is there when you do not want limiting. A third peak repair mode is planned for a future update.
 
-Clean gain is still the path whenever the target and ceiling can be met with linear gain alone.
-
 ### Why are the defaults so loud?
 
 Default target band is **-7.8 to -7.5 LUFS** (loudest section), with **Limiter-assisted** as the default normalization mode. That is intentional for modern EDM libraries: current masters are hot, and if you play B2Bs or a set between other DJs, their material is usually not matched down to streaming-style levels. The defaults assume you want your prep to sit in that world, not under it.
 
 You can lower the target band, switch to **Clean gain**, or tune everything via **Library Tuning** if your library or venue needs something quieter.
 
-### Will this change my original files?
-
-No. DropGain writes `_DG` copies.
-
-### Does it work on macOS?
-
-Maybe, but it has only been tested on Windows so far.
-
 ### Why is this free and open source?
 
 I am lazy. Shipping and supporting a commercial product is work I do not want to take on.
 
-Secondary reasons: I want the widest possible audience, and recognition helps me in two ways - as a bedroom DJ and as a beginner developer. Free + open source gets the tool in more hands than a paid license would.
+That said, open source is also the point: you can read how gain, ceilings, bass trim, and limiting are decided; change defaults for your library; fork or patch behavior without trusting a black-box batch processor. Free + open source is not a claim that DropGain sounds better than commercial tools. It is a claim that the workflow is inspectable and yours to adapt.
 
-## Why not Rekordbox auto gain?
+Secondary reasons: widest possible audience, and recognition as a bedroom DJ / beginner developer.
 
-DJ software auto gain is usually a playback-time trim value derived during library analysis. It is useful for rough level matching, but it does not rewrite the audio and generally does not provide a render-stage DSP path with true-peak limiting, codec-aware headroom, or post-render verification.
+## Compared to other tools
 
-DropGain is different in these areas:
+### Rekordbox (and DJ app) auto gain
 
-- **Section-based analysis** - many DJ auto-gain systems are based on whole-track loudness or similar library-analysis values. DropGain targets the loudest sliding section, so quiet intros, breakdowns, and outros do not dominate the gain calculation.
-- **True-peak ceiling** - DropGain measures oversampled dBTP and treats the ceiling as a hard constraint. If clean gain cannot fit under the ceiling, limiter-assisted mode can use FabFilter Pro-L 2 rather than leaving the track under target or relying on downstream mixer headroom.
-- **Limiter budget** - Pro-L 2 peak control is estimated before render and capped by `max_reduction`; excessive limiting reduces gain instead of pushing the limiter past the configured budget.
-- **Codec-aware output** - MP3 renders include a +0.8 dB true-peak allowance for encode-related peak lift and can retry with safer settings after post-render measurement.
-- **Low-band handling** - bass and sub energy in the reference section can reduce positive gain, avoiding excessive boost on low-frequency-heavy material.
-- **Baked, portable output** - the rendered `_DG` copy contains the level change in the audio data. It is independent of a specific DJ application's database, provided that playback auto gain is disabled.
+Rekordbox and similar apps remain the right choice for library management and playback. DropGain is render-stage prep (see **When DropGain makes sense**).
 
-## Why not Platinum Notes 10 or WaveAlign?
+DJ auto gain is a **playback-time trim** from library analysis. It does not rewrite audio and generally lacks render-stage true-peak limiting, codec headroom modeling, limiter budgeting, bass-aware trim, or post-render verification. DropGain bakes level into `_DG` files you can load outside that app's database. Disable playback auto gain when using those exports (**DJ software** below).
 
-Platinum Notes 10 is a broader file enhancement and repair product: public documentation describes volume standardization, clipped-peak repair, warmth options, multiband processing, and processing templates such as Official, Festival, and The Big Boost. DropGain is narrower by design. It focuses on measurable library loudness matching while preserving the source as much as possible. I don't have enough information about WaveAlign right now and it's not publicly released yet, I have to update later.
+### Platinum Notes 10 and WaveAlign
 
-Use DropGain when you want:
+Platinum Notes 10 is a broader enhancement product: volume standardization, clipped-peak repair, warmth, multiband processing, and templates (Official, Festival, The Big Boost). DropGain is narrower: measurable loudness matching with minimal color. Scope and trade-offs are in **When DropGain makes sense** above. I don't have enough information about WaveAlign yet; it's not publicly released.
 
-- **Explicit targets** - exact LUFS target band, true-peak ceiling, analysis window, hop, gain thresholds, and limiter budget instead of choosing a broad processing template.
-- **Clean gain first** - linear gain is used whenever it satisfies the target and ceiling. DSP is engaged only when true-peak control is required.
-- **External mastering limiter** - limiter-assisted renders use FabFilter Pro-L 2 through the VST3 host, with true-peak limiting, oversampling, and output level tied to the configured ceiling.
-- **Per-track accountability** - CSV and log output expose section boundaries, measured LUFS, dBTP, suggested gain, projected metrics, limiter estimate, render status, and warnings.
-- **Post-render validation** - rendered audio is decoded and re-measured against projections, including section LUFS and true peak.
-- **Codec-aware rendering** - MP3 outputs account for encode-related peak lift and can retry with safer settings after measurement.
-- **Source-preserving operation** - DropGain writes `_DG` copies and does not modify originals.
+**Use Platinum Notes when** you want repair, warmth/saturation, template voicing, or all-in-one processing without per-track inspection.
 
-Use Platinum Notes when you explicitly want its broader enhancement workflow: clipped-peak repair, warmth/saturation, template voicing, or all-in-one processing without inspecting per-track measurements. DropGain intentionally avoids global color, repair, or enhancement passes unless they are required for level and peak control.
+**Cost:** DropGain is free for analysis, clean-gain render, Library Tuning, CSV, and verification. **Limiter-assisted** mode needs licensed **FabFilter Pro-L 2** (VST3). Platinum Notes 10 is **98€** one-time with limiting included; the trade-off is upfront suite cost vs. owning your limiter and keeping enhancement out of the path unless you add it.
 
-### Cost
-DropGain is free. Analysis, clean-gain rendering, Library Tuning, CSV reporting, and post-render verification do not require paid plugins. **Limiter-assisted** mode needs a licensed **FabFilter Pro-L 2** VST3 install; that is a separate purchase and the main cost if you want the full workflow on material that needs peak control beyond clean gain. More limiter options are planned for future updates.
-
-Platinum Notes 10 is a one-time **98€** license. Its processing chain, including limiting, is included in that price. The trade-off is upfront software cost vs. owning your limiter choice and keeping enhancement/color out of the signal path unless you add it yourself.
-
-## How it works
-
-### Workflow
+## Operation
 
 ```
 Source folder  →  Analyze  →  Review table / waveform  →  Render  →  *_DG outputs
                       ↓
-              Library Tuning (optional parameter recommendations)
+              Library Tuning (optional)
 ```
 
-Run modes:
+1. Set **Source folder**; configure LUFS band, dBTP ceiling, normalization mode.
+2. **Analyze Library** (or **Analyze + Create Copies**); review gain, section LUFS, dBTP, peak-control estimate.
+3. Optional **Library Tuning**.
+4. **Render Analyzed** for a cached batch (sources and settings unchanged).
 
-1. **Analyze Library** - measurement and gain decisions only.
-2. **Analyze + Create Copies** - analyze, then render all eligible tracks.
-3. **Render Analyzed** - render from cached analysis (requires unchanged sources and compatible settings).
+Analysis caches `ffprobe` metadata per file; render reuses it when source size and mtime are unchanged.
 
-Analysis and render are separate passes. Analysis caches `ffprobe` metadata per file; render reuses it only when source size and mtime are unchanged.
+## How it works
+
+Technical detail for developers and curious users. Module roles are at the end of this file.
 
 ### Analysis
 
@@ -227,29 +208,11 @@ Post-encode true-peak re-measurement. One retry with reduced Pro-L output level 
 **Post-render verification**  
 Re-decode; compare section LUFS and dBTP to projections (tolerance 0.4 LU / 0.2 dB). Metadata parity check against source.
 
-### Priority order
-
-1. True-peak ceiling  
-2. Loudest-section LUFS target  
-3. Limiter budget (limiter-assisted mode)
-
-Gain is reduced rather than exceeding `max_reduction`. Heavy limiting is reported, not applied beyond the configured budget.
-
-## Operation
-
-1. Set **Source folder**.
-2. Configure LUFS target band, dBTP ceiling, normalization mode.
-3. **Analyze Library** - review gain, section LUFS, dBTP, peak-control estimate, status.
-4. Optional: **Library Tuning** from analyzed data.
-5. **Render Analyzed** or **Analyze + Create Copies**.
-
-Outputs: `Trackname_DG.ext` (or under configured output root). Source files are not modified.
+Gain priority: true-peak ceiling, then loudest-section LUFS, then limiter budget (limiter-assisted). Gain is reduced rather than exceeding `max_reduction`.
 
 ## DJ software
 
-DropGain renders gain into the file. Loudness-normalization metadata is stripped from outputs, but most DJ applications still apply **playback-time auto gain** from their own library analysis (deck gain/trim moved on load, not a rewrite of the file). That stacks on top of the level already baked in by DropGain.
-
-Disable auto gain (or equivalent) in whatever software you use with `_DG` exports:
+Most DJ apps still apply **playback-time auto gain** on load. That stacks on top of level already baked into `_DG` files. Disable it when using DropGain exports:
 
 | Software | Typical setting |
 |----------|-----------------|
@@ -258,11 +221,11 @@ Disable auto gain (or equivalent) in whatever software you use with `_DG` export
 | **TRAKTOR** | Preferences → Mixer → disable **Enable Autogain** |
 | **VirtualDJ** | Options → set **autoGain** off (or equivalent; gain is applied on load from the internal analysis DB) |
 
-**Engine DJ** (standalone players) generally has no auto-gain on playback; level is set with hardware trim. Pre-leveled `_DG` files are usually fine there without an extra preference change.
+**Engine DJ** (standalone players) generally has no auto-gain on playback; pre-leveled `_DG` files are usually fine there.
 
-Load the `_DG` copies (or your configured output folder) into the library you actually play from, not the unprocessed originals, when you want the normalized level on the decks.
+Load `_DG` copies (or your output folder) into the library you play from, not unprocessed originals.
 
-### Dependencies
+### Dependencies and launch
 
 - **FFmpeg / ffprobe** - on `PATH`
 - **FabFilter Pro-L 2** (VST3) - limiter-assisted path via `pedalboard`; `PROL2_PLUGIN_PATH` or auto-discovery
