@@ -24,8 +24,7 @@ Analysis and rendering currently load each file fully into memory; there is no c
 If you work with long material:
 
 - Split files before processing
-- Lower **Analysis workers** in Preferences on machines with limited RAM
-- Expect slower runs; monitor system memory during large batches
+- Lower **Analysis workers** in Preferences
 - Wait for updates
 
 ### Throughput (author's machine)
