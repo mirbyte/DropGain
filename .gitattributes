@@ -1,7 +1,20 @@
+# Normalize all text files to LF in the repo and working tree.
 * text=auto eol=lf
 
+# Source / config
 *.py text eol=lf
 *.pyw text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.editorconfig text eol=lf
+*.gitattributes text eol=lf
+*.gitignore text eol=lf
 
 # Audio (DropGain)
 *.aif binary
