@@ -1,5 +1,7 @@
 # DropGain
 
+**The default open-source loudness prep tool for DJs.**
+
 *Loudness matching for the loudest part of the track, not the whole-file average.*
 
 EDM- and DJ-library oriented section loudness normalization. DropGain analyzes each track's loudest section, suggests gain to hit a target LUFS band under a true-peak ceiling, and optionally writes `_DG` copies alongside the sources.
@@ -8,7 +10,7 @@ EDM- and DJ-library oriented section loudness normalization. DropGain analyzes e
 
 ## Status
 
-**Still in active development.** Behavior, defaults, and edge cases will change.
+**Still in active development.** App will contain bugs. Behavior, defaults, and edge cases will change.
 
 - **Tested platform:** Windows only (by the author so far)
 - **macOS / Linux:** may work (Python + Tkinter + FFmpeg), but not tested
@@ -28,13 +30,17 @@ If you work with long material:
 - Expect slower runs; monitor system memory during large batches
 - Wait for updates
 
+### Throughput (author's machine)
+
+On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs have averaged around **430 tracks/hour** (typical EDM-length material, limiter-assisted mode where needed). I would not go above 4 workers on that CPU even though it has 8 cores. Your numbers will vary with CPU, disk, track length, how many tracks need Pro-L 2 vs clean gain, and output format.
+
 ## What it does
 
 **Library analysis**  
 Recursively scans supported files, decodes each track, and reports programme integrated LUFS, loudest-section LUFS (with section boundaries), sample peak, and oversampled true peak (dBTP). Each row includes suggested gain, projected post-gain metrics, peak-control estimate, and a processing action.
 
 **Section-based targeting**  
-Gain is derived from the loudest sliding window (default 30 s window, 10 s hop), so low-level intros, outros, and breakdowns do not anchor the measurement. A true-peak ceiling (default -1.0 dBTP) takes precedence over the LUFS target when the two conflict.
+Gain is derived from the loudest sliding window (default 20 s window, 5 s hop). A true-peak ceiling (default -1.0 dBTP) takes precedence over the LUFS target when the two conflict.
 
 **Two processing modes**
 
@@ -53,6 +59,38 @@ Profiles analyzed libraries (LUFS distribution, limiter severity, format mix) an
 **Verification**  
 Post-render re-measurement of LUFS and true peak against projections; metadata verification. ReplayGain, Sound Check, and R128 loudness tags are stripped from outputs to prevent downstream double normalization. Optional CSV report (`dropgain_report.csv`) and session log.
 
+## FAQ (nobody's asked yet lol)
+
+### Why use a limiter on already mastered tracks?
+
+Three reasons:
+
+1. **You want to go loud** - boosting into a true-peak ceiling without clipping requires peak control, not just turning up the fader.
+2. **You want modern EDM-style masters** - limiter-assisted mode uses FabFilter Pro-L 2 with the Modern style when clean gain is not enough. That matches how a lot of current dance music is already mastered.
+3. **It is a deliberate choice** - limiter-assisted is the default because that is how I prep my own library. Clean gain is there when you do not want limiting. A third peak repair mode is planned for a future update.
+
+Clean gain is still the path whenever the target and ceiling can be met with linear gain alone.
+
+### Why are the defaults so loud?
+
+Default target band is **-7.8 to -7.5 LUFS** (loudest section), with **Limiter-assisted** as the default normalization mode. That is intentional for modern EDM libraries: current masters are hot, and if you play B2Bs or a set between other DJs, their material is usually not matched down to streaming-style levels. The defaults assume you want your prep to sit in that world, not under it.
+
+You can lower the target band, switch to **Clean gain**, or tune everything via **Library Tuning** if your library or venue needs something quieter.
+
+### Will this change my original files?
+
+No. DropGain writes `_DG` copies.
+
+### Does it work on macOS?
+
+Maybe, but it has only been tested on Windows so far.
+
+### Why is this free and open source?
+
+I am lazy. Shipping and supporting a commercial product is work I do not want to take on.
+
+Secondary reasons: I want the widest possible audience, and recognition helps me in two ways - as a bedroom DJ and as a beginner developer. Free + open source gets the tool in more hands than a paid license would.
+
 ## Why not Rekordbox auto gain?
 
 DJ software auto gain is usually a playback-time trim value derived during library analysis. It is useful for rough level matching, but it does not rewrite the audio and generally does not provide a render-stage DSP path with true-peak limiting, codec-aware headroom, or post-render verification.
@@ -66,9 +104,9 @@ DropGain is different in these areas:
 - **Low-band handling** - bass and sub energy in the reference section can reduce positive gain, avoiding excessive boost on low-frequency-heavy material.
 - **Baked, portable output** - the rendered `_DG` copy contains the level change in the audio data. It is independent of a specific DJ application's database, provided that playback auto gain is disabled.
 
-## Why not Platinum Notes 10?
+## Why not Platinum Notes 10 or WaveAlign?
 
-Platinum Notes 10 is a broader file enhancement and repair product: public documentation describes volume standardization, clipped-peak repair, warmth options, multiband processing, and processing templates such as Official, Festival, and The Big Boost. DropGain is narrower by design. It focuses on measurable library loudness matching while preserving the source as much as possible.
+Platinum Notes 10 is a broader file enhancement and repair product: public documentation describes volume standardization, clipped-peak repair, warmth options, multiband processing, and processing templates such as Official, Festival, and The Big Boost. DropGain is narrower by design. It focuses on measurable library loudness matching while preserving the source as much as possible. I don't have enough information about WaveAlign right now and it's not publicly released yet, I have to update later.
 
 Use DropGain when you want:
 
@@ -86,11 +124,6 @@ Use Platinum Notes when you explicitly want its broader enhancement workflow: cl
 DropGain is free. Analysis, clean-gain rendering, Library Tuning, CSV reporting, and post-render verification do not require paid plugins. **Limiter-assisted** mode needs a licensed **FabFilter Pro-L 2** VST3 install; that is a separate purchase and the main cost if you want the full workflow on material that needs peak control beyond clean gain. More limiter options are planned for future updates.
 
 Platinum Notes 10 is a one-time **98€** license. Its processing chain, including limiting, is included in that price. The trade-off is upfront software cost vs. owning your limiter choice and keeping enhancement/color out of the signal path unless you add it yourself.
-
-**In short:**
-
-- Use **Platinum Notes 10** for one-click enhancement: clipped-peak repair, warmth, template voicing, and a polished commercial workflow.
-- Use **DropGain** for transparent, section-based loudness matching with true-peak safety, limiter budgeting, bass-aware gain restraint, and reports.
 
 ## How it works
 
@@ -113,7 +146,7 @@ Analysis and render are separate passes. Analysis caches `ffprobe` metadata per 
 ### Analysis
 
 **Loudness**  
-Decode to 48 kHz float64 (ITU-R BS.1770-4 metering rate) and measure with `pyloudnorm`. Programme integrated LUFS is computed on the full file. Section loudness uses a fixed window (default 30 s, min 10 s) stepped by hop (default 10 s, min 5 s); the window with highest integrated LUFS defines the reference section. Section start/end times drive gain decisions and post-render verification.
+Decode to 48 kHz float64 (ITU-R BS.1770-4 metering rate) and measure with `pyloudnorm`. Programme integrated LUFS is computed on the full file. Section loudness uses a fixed window (default 20 s, min 10 s) stepped by hop (default 5 s, min 5 s); the window with highest integrated LUFS defines the reference section. Section start/end times drive gain decisions and post-render verification.
 
 Files shorter than one window are measured as a single block.
 
