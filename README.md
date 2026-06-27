@@ -238,10 +238,13 @@ Launch `main.pyw`. **Preferences → Check Pro-L 2 / System** validates the tool
 | Module | Role |
 |--------|------|
 | `main.pyw` | Entry point |
-| `gui_tk.py` | Main window, threading, waveform, run orchestration |
-| `gui_process.py` | Process page: folder, table, log |
-| `gui_settings.py` | Preferences, dependency checks |
-| `gui_library_tuning.py` | Library profile, recommendations |
+| `gui_tk.py` | Main `App` window: navigation, settings I/O, threading, job orchestration, results table |
+| `gui_process.py` | Process page UI: source folder, analyze/render actions, metrics, table, log |
+| `gui_settings.py` | Preferences page, dependency checks |
+| `gui_library_tuning.py` | Library Tuning page, profiling UI |
+| `gui_waveform.py` | Waveform preview worker, decode, PIL canvas rendering |
+| `gui_theme.py` | Shared colors, typography, layout constants, table column defs |
+| `gui_utils.py` | DPI awareness, tooltips, queue log handler, window sizing |
 | `analysis.py` | Measurement, gain logic, discovery, CSV schema |
 | `processing.py` | Render paths, Pro-L 2 host, metadata |
 | `jobs.py` | Analyze / render / batch jobs, worker pools |
