@@ -1,9 +1,12 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
 *$py.class
 *.so
 .Python
+
+# Virtual environments
 .venv/
 venv/
 env/
@@ -14,13 +17,18 @@ build/
 dist/
 *.egg-info/
 *.egg
+pip-wheel-metadata/
 
 # Test / lint / type tools
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+.tox/
+.nox/
+.pyre/
 
 # IDE / editor
 .idea/
@@ -28,17 +36,26 @@ htmlcov/
 *.swp
 *~
 tempCodeRunnerFile.py
+.cursorignore
 
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# DropGain runtime (local paths and logs)
+# DropGain runtime / user data
 dropgain_settings.json
 drop_lufs_settings.json
 dropgain.log
+dropgain_report.csv
+*.log
+
+# Local assets / test material
+test tracks/
+tests/
 
 # Env / secrets
 .env
+.env.*
+!.env.example
 .envrc
