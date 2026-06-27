@@ -1,0 +1,617 @@
+"""DropGain GUI utilities: DPI scaling, tooltips, and thread-safe logging."""
+
+from __future__ import annotations
+
+import logging
+import os
+import queue
+from collections.abc import Callable
+
+import tkinter as tk
+from tkinter import ttk
+
+from gui_theme import (
+    BG_FIELD,
+    FG_MAIN,
+    TOOLTIP_OFFSET_X,
+    TOOLTIP_OFFSET_Y,
+    TOOLTIP_PADX,
+    TOOLTIP_PADY,
+    TOOLTIP_SCREEN_MARGIN,
+    TREEVIEW_ROW_EXTRA_PAD,
+    TREEVIEW_ROW_HEIGHT,
+    TYPE_MICRO,
+    WINDOW_DESIGN_DEFAULT_HEIGHT,
+    WINDOW_DESIGN_DEFAULT_WIDTH,
+    WINDOW_DESIGN_MIN_HEIGHT,
+    WINDOW_DESIGN_MIN_HEIGHT_FLOOR,
+    WINDOW_DESIGN_MIN_WIDTH,
+    WINDOW_DESIGN_MIN_WIDTH_FLOOR,
+    WINDOW_SCREEN_MARGIN_X,
+    WINDOW_SCREEN_MARGIN_Y,
+)
+
+
+def enable_windows_dpi_awareness() -> None:
+    if os.name != "nt":
+        return
+
+    try:
+        import ctypes
+
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+def ui_scale_for(widget: tk.Misc) -> float:
+    try:
+        return max(1.0, float(widget.winfo_fpixels("1i")) / 96.0)
+    except Exception:
+        return 1.0
+
+
+def scaled_px_from_float(scale: float, value: float | int) -> int:
+    return max(1, int(round(float(value) * scale)))
+
+
+def scaled_px(widget: tk.Misc, value: float | int) -> int:
+    return scaled_px_from_float(ui_scale_for(widget), value)
+
+
+def logical_screen_size(widget: tk.Misc) -> tuple[int, int]:
+    scale = ui_scale_for(widget)
+    return (
+        max(1, int(widget.winfo_screenwidth() / scale)),
+        max(1, int(widget.winfo_screenheight() / scale)),
+    )
+
+
+def logical_widget_width(widget: tk.Misc) -> int:
+    try:
+        width = int(widget.winfo_width())
+        if width <= 1:
+            return 0
+        return max(1, int(width / ui_scale_for(widget)))
+    except Exception:
+        return 0
+
+
+def fit_window_bounds(
+    widget: tk.Misc,
+    *,
+    default_width: int = WINDOW_DESIGN_DEFAULT_WIDTH,
+    default_height: int = WINDOW_DESIGN_DEFAULT_HEIGHT,
+    design_min_width: int = WINDOW_DESIGN_MIN_WIDTH,
+    design_min_height: int = WINDOW_DESIGN_MIN_HEIGHT,
+) -> tuple[int, int, int, int]:
+    """Return width, height, min_width, min_height in CTk logical units."""
+    logical_w, logical_h = logical_screen_size(widget)
+    max_w = max(WINDOW_DESIGN_MIN_WIDTH_FLOOR, logical_w - WINDOW_SCREEN_MARGIN_X)
+    max_h = max(WINDOW_DESIGN_MIN_HEIGHT_FLOOR, logical_h - WINDOW_SCREEN_MARGIN_Y)
+    min_w = min(design_min_width, max_w)
+    min_h = min(design_min_height, max_h)
+    width = min(default_width, max_w)
+    height = min(default_height, max(640, max_h))
+    return width, height, min_w, min_h
+
+
+def treeview_rowheight_px(cell_linespace: int, ui_scale: float) -> int:
+    """Device-pixel row height; cell_linespace already reflects monitor DPI."""
+    return max(
+        scaled_px_from_float(ui_scale, TREEVIEW_ROW_HEIGHT),
+        cell_linespace + TREEVIEW_ROW_EXTRA_PAD,
+    )
+
+
+def treeview_column_width_px(text_width: int, pad: int) -> int:
+    """Device-pixel column width; text_width from font.measure() is already DPI-aware."""
+    return text_width + pad
+
+
+def make_tooltip_label(
+    parent: tk.Misc,
+    text: str,
+    *,
+    wraplength: int,
+) -> tk.Label:
+    return tk.Label(
+        parent,
+        text=text,
+        justify="left",
+        anchor="w",
+        wraplength=wraplength,
+        background=BG_FIELD,
+        foreground=FG_MAIN,
+        activebackground=BG_FIELD,
+        activeforeground=FG_MAIN,
+        relief="solid",
+        borderwidth=1,
+        padx=TOOLTIP_PADX,
+        pady=TOOLTIP_PADY,
+        font=("Segoe UI", TYPE_MICRO),
+    )
+
+
+def position_tooltip_window(
+    window: tk.Toplevel,
+    root_x: int,
+    root_y: int,
+) -> None:
+    x = root_x + TOOLTIP_OFFSET_X
+    y = root_y + TOOLTIP_OFFSET_Y
+    try:
+        window.update_idletasks()
+        width = window.winfo_reqwidth()
+        height = window.winfo_reqheight()
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        x = min(x, max(0, screen_width - width - TOOLTIP_SCREEN_MARGIN))
+        y = min(y, max(0, screen_height - height - TOOLTIP_SCREEN_MARGIN))
+        window.geometry(f"+{x}+{y}")
+    except Exception:
+        pass
+
+
+class GuiQueueLogHandler(logging.Handler):
+    """Forward log records to the Tkinter UI queue for thread-safe display."""
+
+    def __init__(self, ui_queue: queue.Queue[tuple[str, object]]) -> None:
+        super().__init__()
+        self._ui_queue = ui_queue
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = self.format(record)
+            if not message.endswith("\n"):
+                message += "\n"
+
+            if record.levelno >= logging.ERROR:
+                tag = "error"
+            elif record.levelno >= logging.WARNING:
+                tag = "warn"
+            else:
+                tag = None
+
+            self._ui_queue.put(("log_message", (message, tag)))
+        except Exception:
+            self.handleError(record)
+
+
+class DropGainTooltip:
+    """Small delayed tooltip for Tkinter/CustomTkinter widgets."""
+
+    def __init__(
+        self,
+        widget: tk.Widget,
+        text: str,
+        *,
+        delay_ms: int = 550,
+        wraplength: int = 390,
+    ) -> None:
+        self.widget = widget
+        self.text = text.strip()
+        self.delay_ms = delay_ms
+        self.wraplength = wraplength
+        self._after_id: str | None = None
+        self._tip_window: tk.Toplevel | None = None
+        self._last_root_x = 0
+        self._last_root_y = 0
+        self._bind_recursive(widget)
+
+    def _bind_recursive(self, widget: tk.Widget) -> None:
+        for sequence, callback in (
+            ("<Enter>", self._on_enter),
+            ("<Motion>", self._on_motion),
+            ("<Leave>", self._on_leave),
+            ("<ButtonPress>", self._on_leave),
+        ):
+            try:
+                widget.bind(sequence, callback, add=True)
+            except Exception:
+                pass
+
+        try:
+            children = widget.winfo_children()
+        except Exception:
+            children = []
+
+        for child in children:
+            self._bind_recursive(child)
+
+    def _on_enter(self, event: tk.Event) -> None:
+        self._remember_pointer(event)
+        self._schedule()
+
+    def _on_motion(self, event: tk.Event) -> None:
+        self._remember_pointer(event)
+        if self._tip_window is not None:
+            self._position_window()
+
+    def _on_leave(self, _event: tk.Event | None = None) -> None:
+        self._cancel_schedule()
+        try:
+            self.widget.after(80, self._hide_if_pointer_left)
+        except Exception:
+            self._hide()
+
+    def _remember_pointer(self, event: tk.Event) -> None:
+        try:
+            self._last_root_x = int(event.x_root)
+            self._last_root_y = int(event.y_root)
+        except Exception:
+            try:
+                self._last_root_x = self.widget.winfo_pointerx()
+                self._last_root_y = self.widget.winfo_pointery()
+            except Exception:
+                pass
+
+    def _schedule(self) -> None:
+        if not self.text or self._tip_window is not None:
+            return
+        self._cancel_schedule()
+        try:
+            self._after_id = self.widget.after(self.delay_ms, self._show)
+        except Exception:
+            self._after_id = None
+
+    def _cancel_schedule(self) -> None:
+        if self._after_id is None:
+            return
+        try:
+            self.widget.after_cancel(self._after_id)
+        except Exception:
+            pass
+        self._after_id = None
+
+    def _pointer_inside_widget(self) -> bool:
+        try:
+            x = self.widget.winfo_pointerx()
+            y = self.widget.winfo_pointery()
+            left = self.widget.winfo_rootx()
+            top = self.widget.winfo_rooty()
+            right = left + self.widget.winfo_width()
+            bottom = top + self.widget.winfo_height()
+            return left <= x <= right and top <= y <= bottom
+        except Exception:
+            return False
+
+    def _hide_if_pointer_left(self) -> None:
+        if not self._pointer_inside_widget():
+            self._hide()
+
+    def _show(self) -> None:
+        self._after_id = None
+        if self._tip_window is not None or not self.text:
+            return
+
+        try:
+            if not self.widget.winfo_exists() or not self._pointer_inside_widget():
+                return
+        except Exception:
+            return
+
+        window = tk.Toplevel(self.widget)
+        window.withdraw()
+        window.overrideredirect(True)
+        try:
+            window.attributes("-topmost", True)
+        except Exception:
+            pass
+
+        label = make_tooltip_label(
+            window,
+            self.text,
+            wraplength=self.wraplength,
+        )
+        label.pack()
+        self._tip_window = window
+        self._position_window()
+        window.deiconify()
+
+    def _position_window(self) -> None:
+        window = self._tip_window
+        if window is None:
+            return
+
+        position_tooltip_window(window, self._last_root_x, self._last_root_y)
+
+    def _hide(self) -> None:
+        window = self._tip_window
+        self._tip_window = None
+        if window is not None:
+            try:
+                window.destroy()
+            except Exception:
+                pass
+
+
+class TreeviewHeadingTooltip:
+    """Delayed hover tooltips for ttk.Treeview column headings."""
+
+    def __init__(
+        self,
+        treeview: ttk.Treeview,
+        column_tooltips: dict[str, str],
+        *,
+        delay_ms: int = 550,
+        wraplength: int = 390,
+    ) -> None:
+        self.treeview = treeview
+        self.column_tooltips = {
+            column_id: text.strip()
+            for column_id, text in column_tooltips.items()
+            if text.strip()
+        }
+        self.delay_ms = delay_ms
+        self.wraplength = wraplength
+        self._after_id: str | None = None
+        self._tip_window: tk.Toplevel | None = None
+        self._active_column: str | None = None
+        self._pending_text = ""
+        self._last_root_x = 0
+        self._last_root_y = 0
+        self._column_index_map = self._build_column_index_map()
+
+        treeview.bind("<Motion>", self._on_motion, add=True)
+        treeview.bind("<Leave>", self._on_leave, add=True)
+        treeview.bind("<ButtonPress>", self._on_leave, add=True)
+
+    def _build_column_index_map(self) -> dict[int, str]:
+        mapping: dict[int, str] = {}
+        for index, column_id in enumerate(self.treeview["columns"], start=1):
+            mapping[index] = str(column_id)
+        return mapping
+
+    def _column_at(self, event: tk.Event) -> str | None:
+        try:
+            if self.treeview.identify_region(event.x, event.y) != "heading":
+                return None
+            column = self.treeview.identify_column(event.x)
+        except Exception:
+            return None
+        if not column.startswith("#"):
+            return None
+        try:
+            column_index = int(column[1:])
+        except ValueError:
+            return None
+        return self._column_index_map.get(column_index)
+
+    def _on_motion(self, event: tk.Event) -> None:
+        self._last_root_x = int(event.x_root)
+        self._last_root_y = int(event.y_root)
+        column_id = self._column_at(event)
+        if column_id is None:
+            self._clear_active()
+            return
+
+        tooltip_text = self.column_tooltips.get(column_id, "")
+        if not tooltip_text:
+            self._clear_active()
+            return
+
+        if column_id == self._active_column:
+            if self._tip_window is not None:
+                self._position_window()
+            return
+
+        self._hide()
+        self._active_column = column_id
+        self._pending_text = tooltip_text
+        self._schedule()
+
+    def _on_leave(self, _event: tk.Event | None = None) -> None:
+        self._clear_active()
+
+    def _schedule(self) -> None:
+        if not self._pending_text or self._tip_window is not None:
+            return
+        self._cancel_schedule()
+        try:
+            self._after_id = self.treeview.after(self.delay_ms, self._show)
+        except Exception:
+            self._after_id = None
+
+    def _cancel_schedule(self) -> None:
+        if self._after_id is None:
+            return
+        try:
+            self.treeview.after_cancel(self._after_id)
+        except Exception:
+            pass
+        self._after_id = None
+
+    def _clear_active(self) -> None:
+        self._active_column = None
+        self._pending_text = ""
+        self._cancel_schedule()
+        self._hide()
+
+    def _show(self) -> None:
+        self._after_id = None
+        if self._tip_window is not None or not self._pending_text:
+            return
+
+        try:
+            if not self.treeview.winfo_exists():
+                return
+        except Exception:
+            return
+
+        window = tk.Toplevel(self.treeview)
+        window.withdraw()
+        window.overrideredirect(True)
+        try:
+            window.attributes("-topmost", True)
+        except Exception:
+            pass
+
+        label = make_tooltip_label(
+            window,
+            self._pending_text,
+            wraplength=self.wraplength,
+        )
+        label.pack()
+        self._tip_window = window
+        self._position_window()
+        window.deiconify()
+
+    def _position_window(self) -> None:
+        window = self._tip_window
+        if window is None:
+            return
+
+        position_tooltip_window(window, self._last_root_x, self._last_root_y)
+
+    def _hide(self) -> None:
+        window = self._tip_window
+        self._tip_window = None
+        if window is not None:
+            try:
+                window.destroy()
+            except Exception:
+                pass
+
+
+_ALPHA_SUPPORT: bool | None = None
+
+
+def _toplevel_alpha_supported(root: tk.Misc) -> bool:
+    global _ALPHA_SUPPORT
+    if _ALPHA_SUPPORT is not None:
+        return _ALPHA_SUPPORT
+    try:
+        probe = tk.Toplevel(root)
+        probe.withdraw()
+        probe.attributes("-alpha", 0.5)
+        probe.destroy()
+        _ALPHA_SUPPORT = True
+    except Exception:
+        _ALPHA_SUPPORT = False
+    return _ALPHA_SUPPORT
+
+
+class ContentFadeTransition:
+    """Brief dim overlay while swapping tab panels."""
+
+    PEAK_ALPHA = 0.45
+    STEP_MS = 14
+    STEPS = 4
+
+    def __init__(self, root: tk.Misc) -> None:
+        self._root = root
+        self._active = False
+        self._overlay: tk.Toplevel | None = None
+
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    def run(
+        self,
+        container: tk.Widget,
+        swap: Callable[[], None],
+        *,
+        on_complete: Callable[[], None] | None = None,
+    ) -> None:
+        if self._active or not _toplevel_alpha_supported(self._root):
+            swap()
+            if on_complete is not None:
+                on_complete()
+            return
+
+        self._active = True
+        self._overlay = self._create_overlay(container)
+
+        def fade_in_then_swap(step: int = 0) -> None:
+            if self._overlay is None:
+                self._finish_after_swap(swap, on_complete)
+                return
+            if step >= self.STEPS:
+                try:
+                    swap()
+                except Exception:
+                    self._destroy_overlay()
+                    self._active = False
+                    raise
+                fade_out()
+                return
+            try:
+                self._overlay.attributes("-alpha", (step + 1) / self.STEPS * self.PEAK_ALPHA)
+            except Exception:
+                self._finish_after_swap(swap, on_complete)
+                return
+            self._root.after(self.STEP_MS, lambda: fade_in_then_swap(step + 1))
+
+        def fade_out(step: int = 0) -> None:
+            if self._overlay is None:
+                self._active = False
+                if on_complete is not None:
+                    on_complete()
+                return
+            if step >= self.STEPS:
+                self._destroy_overlay()
+                self._active = False
+                if on_complete is not None:
+                    on_complete()
+                return
+            try:
+                self._overlay.attributes("-alpha", (self.STEPS - step - 1) / self.STEPS * self.PEAK_ALPHA)
+            except Exception:
+                self._destroy_overlay()
+                self._active = False
+                if on_complete is not None:
+                    on_complete()
+                return
+            self._root.after(self.STEP_MS, lambda: fade_out(step + 1))
+
+        fade_in_then_swap()
+
+    def _finish_after_swap(
+        self,
+        swap: Callable[[], None],
+        on_complete: Callable[[], None] | None,
+    ) -> None:
+        try:
+            swap()
+        finally:
+            self._destroy_overlay()
+            self._active = False
+            if on_complete is not None:
+                on_complete()
+
+    def _create_overlay(self, container: tk.Widget) -> tk.Toplevel:
+        container.update_idletasks()
+        overlay = tk.Toplevel(self._root)
+        overlay.withdraw()
+        overlay.overrideredirect(True)
+        overlay.attributes("-topmost", True)
+        overlay.attributes("-alpha", 0.0)
+        overlay.configure(bg="#000000")
+        tk.Frame(overlay, bg="#000000").pack(fill="both", expand=True)
+        self._position_overlay(overlay, container)
+        overlay.deiconify()
+        return overlay
+
+    def _position_overlay(self, overlay: tk.Toplevel, container: tk.Widget) -> None:
+        try:
+            x = container.winfo_rootx()
+            y = container.winfo_rooty()
+            w = max(container.winfo_width(), 1)
+            h = max(container.winfo_height(), 1)
+            overlay.geometry(f"{w}x{h}+{x}+{y}")
+        except Exception:
+            pass
+
+    def _destroy_overlay(self) -> None:
+        overlay = self._overlay
+        self._overlay = None
+        if overlay is not None:
+            try:
+                overlay.destroy()
+            except Exception:
+                pass
