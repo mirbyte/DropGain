@@ -1,3 +1,10 @@
+[![License](https://img.shields.io/github/license/mirbyte/DropGain?color=00b4d8&maxAge=604800)](https://github.com/mirbyte/DropGain/blob/main/LICENSE)
+![Size](https://img.shields.io/github/repo-size/mirbyte/DropGain?label=size&color=00b4d8&maxAge=86400)
+![LastCommit](https://img.shields.io/github/last-commit/mirbyte/DropGain?color=00b4d8&label=repo+updated)
+![Views](https://hits.sh/github.com/mirbyte/DropGain.svg?color=00b4d8&label=views)
+
+<!-- release downloads [![Download Count](https://img.shields.io/github/downloads/mirbyte/DropGain/total?color=00b4d8&maxAge=86400)](https://github.com/mirbyte/DropGain/releases) -->
+
 # DropGain
 
 **The default open-source loudness prep tool for DJs.**
@@ -254,5 +261,9 @@ UI invokes `jobs.py`; work runs on background threads with queue-based progress.
 <br>
 <br>
 
+
 <img width="3839" height="2019" alt="ui_launch" src="https://github.com/user-attachments/assets/7a5e8e2f-f977-4e23-8a14-55da47ea72a2" />
+
+
+<img src="https://api.visitorbadge.io/api/VisitorHit?user=mirbyte&repo=DropGain&label=VIEWS&countColor=%2300b4d8" width="0" height="0" />
 
