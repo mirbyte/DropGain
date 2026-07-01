@@ -91,9 +91,13 @@ You can lower the target band, switch to **Clean gain**, or tune everything via 
 
 I am lazy. Shipping and supporting a commercial product is work I do not want to take on.
 
-That said, open source is also the point: you can read how gain, ceilings, bass trim, and limiting are decided; change defaults for your library; fork or patch behavior without trusting a black-box batch processor. Free + open source is not a claim that DropGain sounds better than commercial tools. It is a claim that the workflow is inspectable and yours to adapt.
+That said, open source is also the point: you can read and change how gain, ceilings, bass trim, and limiting are decided; fork or patch behavior without trusting a black-box batch processor. Free + open source is not a claim that DropGain sounds better than commercial tools. It is a claim that the workflow is inspectable and yours to adapt.
 
-Secondary reasons: widest possible audience, and recognition as a bedroom DJ / beginner developer.
+**Secondary reasons:**
+
+- **Audience:** Reaching the widest possible user base.
+- **Growth:** Gaining recognition as a bedroom DJ and beginner developer.
+- **Realism:** Without a professional background in audio or software engineering, building something that can compete commercially is an incredibly steep uphill battle.
 
 ## Compared to other tools
 
