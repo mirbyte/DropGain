@@ -154,6 +154,7 @@ class PreferencesPage(ctk.CTkFrame):
         self._setting_card_frames: list[ctk.CTkFrame] = []
         self._preferences_single_column = False
         self._layout_after_id: str | None = None
+        self._controls_state: str | None = None
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -282,18 +283,21 @@ class PreferencesPage(ctk.CTkFrame):
     def _apply_preferences_layout(self, single_column: bool) -> None:
         body = self.body
         if single_column:
-            body.grid_columnconfigure(0, weight=1)
-            body.grid_columnconfigure(1, weight=0)
+            # Clear stale columnspan after switching from two-column layout
+            body.grid_columnconfigure(0, weight=1, minsize=0)
+            body.grid_columnconfigure(1, weight=0, minsize=0)
             for index, outer in enumerate(self._setting_card_frames):
                 outer.grid(
                     row=index + 1,
                     column=0,
+                    columnspan=1,
                     sticky="nsew",
                     padx=0,
                     pady=(0, 14),
                 )
         else:
-            body.grid_columnconfigure((0, 1), weight=1)
+            body.grid_columnconfigure(0, weight=1, minsize=0)
+            body.grid_columnconfigure(1, weight=1, minsize=0)
             card_count = len(self._setting_card_frames)
             for index, outer in enumerate(self._setting_card_frames):
                 row = (index // 2) + 1
@@ -311,12 +315,18 @@ class PreferencesPage(ctk.CTkFrame):
                     outer.grid(
                         row=row,
                         column=column,
+                        columnspan=1,
                         sticky="nsew",
                         padx=(0, 7) if column == 0 else (7, 0),
                         pady=(0, 14),
                     )
 
     def set_controls_state(self, state: str) -> None:
+        # Avoid redundant reconfigure on +/- clicks (idle refresh retriggers this)
+        if state == self._controls_state:
+            return
+        self._controls_state = state
+
         for number_input in self._number_inputs:
             number_input.configure_state(state)
         for widget in (
