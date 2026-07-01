@@ -79,7 +79,7 @@ Three reasons:
 
 1. **You want to go loud** - boosting into a true-peak ceiling without clipping requires peak control, not just turning up the fader.
 2. **You want modern EDM-style masters** - limiter-assisted mode uses FabFilter Pro-L 2 with the Modern style when clean gain is not enough. That matches how a lot of current dance music is already mastered.
-3. **It is a deliberate choice** - limiter-assisted is the default because that is how I prep my own library. Clean gain is there when you do not want limiting. A third peak repair mode is planned for a future update.
+3. **It is a deliberate choice** - limiter-assisted is the default because that is how I plan to prep my own library this summer. Clean gain is there when you do not want limiting. A third peak repair mode is planned for a future update.
 
 ### Why are the defaults so loud?
 
@@ -93,11 +93,7 @@ I am lazy. Shipping and supporting a commercial product is work I do not want to
 
 That said, open source is also the point: you can read and change how gain, ceilings, bass trim, and limiting are decided; fork or patch behavior without trusting a black-box batch processor. Free + open source is not a claim that DropGain sounds better than commercial tools. It is a claim that the workflow is inspectable and yours to adapt.
 
-**Secondary reasons:**
-
-- **Audience:** Reaching the widest possible user base.
-- **Growth:** Gaining recognition as a bedroom DJ and beginner developer.
-- **Realism:** Without a professional background in audio or software engineering, building something that can compete commercially is an incredibly steep uphill battle.
+**Plus:** It reaches the widest possible audience, helps me get recognition as a bedroom DJ / beginner developer, and without a professional background in audio or software engineering, building something that can compete on a commercial level is an incredibly steep uphill battle.
 
 ## Compared to other tools
 
