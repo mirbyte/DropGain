@@ -496,11 +496,14 @@ def _toplevel_alpha_supported(root: tk.Misc) -> bool:
 
 
 class ContentFadeTransition:
-    """Brief dim overlay while swapping tab panels."""
+    """Full-page overlay that masks navigation until the target page has settled."""
 
-    PEAK_ALPHA = 0.45
-    STEP_MS = 14
-    STEPS = 4
+    PEAK_ALPHA = 0.98
+    STEP_MS = 8
+    STEPS = 2
+    SETTLE_MS = 150
+    OVERLAY_BG = "#1e1e1e"
+    FINAL_UPDATE_PASSES = 3
 
     def __init__(self, root: tk.Misc) -> None:
         self._root = root
@@ -516,12 +519,12 @@ class ContentFadeTransition:
         container: tk.Widget,
         swap: Callable[[], None],
         *,
+        before_reveal: Callable[[], None] | None = None,
         on_complete: Callable[[], None] | None = None,
+        settle_ms: int | None = None,
     ) -> None:
         if self._active or not _toplevel_alpha_supported(self._root):
-            swap()
-            if on_complete is not None:
-                on_complete()
+            self._finish_after_swap(swap, before_reveal, on_complete)
             return
 
         self._active = True
@@ -529,60 +532,85 @@ class ContentFadeTransition:
 
         def fade_in_then_swap(step: int = 0) -> None:
             if self._overlay is None:
-                self._finish_after_swap(swap, on_complete)
+                self._finish_after_swap(swap, before_reveal, on_complete)
                 return
             if step >= self.STEPS:
                 try:
                     swap()
+                    self._run_before_reveal(container, before_reveal)
                 except Exception:
                     self._destroy_overlay()
                     self._active = False
                     raise
-                fade_out()
+                self._root.after(
+                    self.SETTLE_MS if settle_ms is None else max(0, int(settle_ms)),
+                    finalize_reveal,
+                )
                 return
             try:
                 self._overlay.attributes("-alpha", (step + 1) / self.STEPS * self.PEAK_ALPHA)
             except Exception:
-                self._finish_after_swap(swap, on_complete)
+                self._finish_after_swap(swap, before_reveal, on_complete)
                 return
             self._root.after(self.STEP_MS, lambda: fade_in_then_swap(step + 1))
 
-        def fade_out(step: int = 0) -> None:
-            if self._overlay is None:
-                self._active = False
-                if on_complete is not None:
-                    on_complete()
-                return
-            if step >= self.STEPS:
-                self._destroy_overlay()
-                self._active = False
-                if on_complete is not None:
-                    on_complete()
-                return
+        def finalize_reveal() -> None:
             try:
-                self._overlay.attributes("-alpha", (self.STEPS - step - 1) / self.STEPS * self.PEAK_ALPHA)
-            except Exception:
+                self._flush_pending_ui(container, include_timers=True, passes=self.FINAL_UPDATE_PASSES)
+            finally:
                 self._destroy_overlay()
                 self._active = False
                 if on_complete is not None:
                     on_complete()
-                return
-            self._root.after(self.STEP_MS, lambda: fade_out(step + 1))
 
         fade_in_then_swap()
 
     def _finish_after_swap(
         self,
         swap: Callable[[], None],
+        before_reveal: Callable[[], None] | None,
         on_complete: Callable[[], None] | None,
     ) -> None:
         try:
             swap()
+            self._run_before_reveal(None, before_reveal)
         finally:
             self._destroy_overlay()
             self._active = False
             if on_complete is not None:
                 on_complete()
+
+    def _run_before_reveal(
+        self,
+        container: tk.Widget | None,
+        before_reveal: Callable[[], None] | None,
+    ) -> None:
+        if before_reveal is not None:
+            before_reveal()
+        self._flush_pending_ui(container, include_timers=False, passes=2)
+
+    def _flush_pending_ui(
+        self,
+        container: tk.Widget | None,
+        *,
+        include_timers: bool,
+        passes: int,
+    ) -> None:
+        """Flush geometry, drawing, and optionally due Tk timers while covered."""
+        for _ in range(max(1, int(passes))):
+            try:
+                self._root.update_idletasks()
+                if self._overlay is not None and container is not None:
+                    self._position_overlay(self._overlay, container)
+                if include_timers:
+                    # update() is intentionally limited to the final covered
+                    # phase. It lets due after()/after_idle callbacks finish
+                    # before the curtain is removed, avoiding visible settling.
+                    self._root.update()
+                else:
+                    self._root.update_idletasks()
+            except Exception:
+                return
 
     def _create_overlay(self, container: tk.Widget) -> tk.Toplevel:
         container.update_idletasks()
@@ -591,10 +619,14 @@ class ContentFadeTransition:
         overlay.overrideredirect(True)
         overlay.attributes("-topmost", True)
         overlay.attributes("-alpha", 0.0)
-        overlay.configure(bg="#000000")
-        tk.Frame(overlay, bg="#000000").pack(fill="both", expand=True)
+        overlay.configure(bg=self.OVERLAY_BG)
+        tk.Frame(overlay, bg=self.OVERLAY_BG).pack(fill="both", expand=True)
         self._position_overlay(overlay, container)
         overlay.deiconify()
+        try:
+            overlay.lift()
+        except Exception:
+            pass
         return overlay
 
     def _position_overlay(self, overlay: tk.Toplevel, container: tk.Widget) -> None:

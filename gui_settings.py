@@ -248,6 +248,18 @@ class PreferencesPage(ctk.CTkFrame):
     def refresh_layout(self) -> None:
         self._schedule_preferences_layout()
 
+    def settle_layout_for_reveal(self) -> None:
+        """Cancel debounced relayout and settle Preferences while hidden."""
+        if self._layout_after_id is not None:
+            try:
+                self.after_cancel(self._layout_after_id)
+            except Exception:
+                pass
+            self._layout_after_id = None
+        self.update_idletasks()
+        self._update_preferences_layout(logical_widget_width(self))
+        self.update_idletasks()
+
     def _schedule_preferences_layout(self) -> None:
         if self._layout_after_id is not None:
             try:

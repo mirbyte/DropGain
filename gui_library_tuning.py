@@ -415,10 +415,32 @@ class LibraryTuningPage(ctk.CTkFrame):
             }
             mapping[tab_id].grid(row=0, column=0, sticky="nsew")
 
-        self._app._fade_panel_swap(self.evidence_content, swap, on_complete=lambda: self.after_idle(self._redraw_charts))
+        self._app._fade_panel_swap(
+            self.evidence_content,
+            swap,
+            before_reveal=self._settle_charts_for_reveal,
+            settle_ms=90,
+        )
 
     def refresh_from_app(self) -> None:
         self._refresh_profile()
+
+    def settle_layout_for_reveal(self) -> None:
+        """Settle Library Tuning metrics and charts while the page is covered."""
+        self.refresh_from_app()
+        self.update_idletasks()
+        self._settle_charts_for_reveal()
+        self.update_idletasks()
+
+    def _settle_charts_for_reveal(self) -> None:
+        if self._chart_after_id is not None:
+            try:
+                self.after_cancel(self._chart_after_id)
+            except Exception:
+                pass
+            self._chart_after_id = None
+        self.update_idletasks()
+        self._redraw_charts()
 
     def _apply_recommended(self) -> None:
         if self._recommendation is None:

@@ -69,17 +69,75 @@ class ProcessPage(ctk.CTkFrame):
         self._app = app
         self._dashboard_mode = ""
         self._settings_wrap = PROCESS_SETTINGS_WRAP_WIDTH
+        self._refresh_after_id: str | None = None
+        self._align_after_id: str | None = None
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
         self._build(app)
         self.bind("<Configure>", self._on_page_configure, add="+")
-        self.after_idle(self.refresh_layout)
+        self._schedule_refresh_layout(idle=True)
 
     def refresh_layout(self) -> None:
+        self._refresh_after_id = None
         self._update_dashboard_layout()
-        self.after_idle(self._align_dashboard_row)
+        self._schedule_align_dashboard_row(idle=True)
+
+    def settle_layout_for_reveal(self) -> None:
+        """Cancel deferred layout callbacks and settle the dashboard while hidden."""
+        self._cancel_deferred_layout()
+        self.update_idletasks()
+        self._dashboard_mode = ""
+        self._update_dashboard_layout()
+        if self._align_after_id is not None:
+            try:
+                self.after_cancel(self._align_after_id)
+            except Exception:
+                pass
+            self._align_after_id = None
+        self.update_idletasks()
+        self._align_dashboard_row()
+        self.update_idletasks()
+
+    def _cancel_deferred_layout(self) -> None:
+        for attr in ("_refresh_after_id", "_align_after_id"):
+            after_id = getattr(self, attr, None)
+            if after_id is not None:
+                try:
+                    self.after_cancel(after_id)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+
+    def _schedule_refresh_layout(self, *, idle: bool = False, delay_ms: int | None = None) -> None:
+        if self._refresh_after_id is not None:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        if delay_ms is not None:
+            self._refresh_after_id = self.after(delay_ms, self.refresh_layout)
+        elif idle:
+            self._refresh_after_id = self.after_idle(self.refresh_layout)
+        else:
+            self.refresh_layout()
+
+    def _schedule_align_dashboard_row(self, *, idle: bool = False, delay_ms: int | None = None) -> None:
+        if self._align_after_id is not None:
+            try:
+                self.after_cancel(self._align_after_id)
+            except Exception:
+                pass
+            self._align_after_id = None
+        if delay_ms is not None:
+            self._align_after_id = self.after(delay_ms, self._align_dashboard_row)
+        elif idle:
+            self._align_after_id = self.after_idle(self._align_dashboard_row)
+        else:
+            self._align_dashboard_row()
 
     def _align_dashboard_row(self) -> None:
+        self._align_after_id = None
         if self._dashboard_mode != "wide":
             self._folder_block.grid_configure(pady=0)
             self._metrics_column.grid_configure(pady=0, sticky="n")
@@ -89,7 +147,7 @@ class ProcessPage(ctk.CTkFrame):
         folder_h = self._folder_block.winfo_reqheight()
         actions_h = self._actions_block.winfo_reqheight()
         if folder_h <= 1 or actions_h <= 1:
-            self.after(50, self._align_dashboard_row)
+            self._schedule_align_dashboard_row(delay_ms=50)
             return
         row_h = max(folder_h, actions_h)
         folder_top = max(0, (row_h - folder_h) // 2)
@@ -101,7 +159,7 @@ class ProcessPage(ctk.CTkFrame):
         bbox = self._dashboard.grid_bbox(0, 2)
         actions_w = self._actions_block.winfo_reqwidth()
         if bbox is None or actions_w <= 1:
-            self.after(50, self._align_dashboard_row)
+            self._schedule_align_dashboard_row(delay_ms=50)
             return
         _x, _y, col2_w, _h = bbox
         pad_left = max(0, (col2_w - actions_w) // 2 + self._ACTIONS_HORIZONTAL_NUDGE)
@@ -111,12 +169,12 @@ class ProcessPage(ctk.CTkFrame):
         if event.widget is not self:
             return
         self._update_dashboard_layout()
-        self.after_idle(self._align_dashboard_row)
+        self._schedule_align_dashboard_row(idle=True)
 
     def _update_dashboard_layout(self) -> None:
         logical_w = logical_widget_width(self)
         if logical_w <= 0:
-            self.after(50, self.refresh_layout)
+            self._schedule_refresh_layout(delay_ms=50)
             return
         if logical_w < DASHBOARD_LAYOUT_STACKED_WIDTH:
             mode = "stacked"
@@ -178,7 +236,7 @@ class ProcessPage(ctk.CTkFrame):
             metrics.grid(row=0, column=1, sticky="nsew", padx=(4, 4), pady=0)
             actions.grid(row=0, column=2, sticky="nw", padx=0, pady=0)
             self._layout_metrics_column(mode)
-            self.after_idle(self._align_dashboard_row)
+            self._schedule_align_dashboard_row(idle=True)
             return
 
         if mode == "compact":
@@ -604,4 +662,4 @@ class ProcessPage(ctk.CTkFrame):
         if event.widget is not self:
             return
         self._dashboard_mode = ""
-        self.refresh_layout()
+        self._schedule_refresh_layout(idle=True)

@@ -998,30 +998,95 @@ class App(WaveformMixin, ctk.CTk):
         container: tk.Widget,
         swap: Callable[[], None],
         *,
+        before_reveal: Callable[[], None] | None = None,
         on_complete: Callable[[], None] | None = None,
+        settle_ms: int | None = None,
     ) -> None:
-        self._panel_fade.run(container, swap, on_complete=on_complete)
+        self._panel_fade.run(
+            container,
+            swap,
+            before_reveal=before_reveal,
+            on_complete=on_complete,
+            settle_ms=settle_ms,
+        )
+
+    def _ensure_main_page_for_transition(self, name: str) -> tk.Widget | None:
+        """Create lazy pages before the visible swap so construction is never revealed."""
+        if name == "library" and self.library_tuning_page is None:
+            from gui_library_tuning import LibraryTuningPage
+
+            self.library_tuning_page = LibraryTuningPage(self, self.pages_container)
+            self.library_tuning_page.grid(row=0, column=0, sticky="nsew")
+            self.library_tuning_page.grid_remove()
+
+        if name == "preferences":
+            self._ensure_preferences_page()
+            if self._active_main_page != "preferences" and self.preferences_page is not None:
+                self.preferences_page.grid_remove()
+
+        return {
+            "process": self.process_page,
+            "library": self.library_tuning_page,
+            "preferences": self.preferences_page,
+        }.get(name)
+
+    def _prepare_main_page_for_reveal(self, name: str, prev_page: str) -> None:
+        """Run page refresh/layout work while the curtain is still up."""
+        if prev_page == "preferences" and name != "preferences":
+            self._flush_main_page_visuals()
+
+        if name == "process":
+            try:
+                self.process_page.settle_layout_for_reveal()
+            except Exception:
+                try:
+                    self.process_page.refresh_layout()
+                except Exception:
+                    pass
+            if hasattr(self, "results_table"):
+                try:
+                    self._resize_results_table_columns()
+                except Exception:
+                    pass
+
+        elif name == "library" and self.library_tuning_page is not None:
+            try:
+                self.library_tuning_page.settle_layout_for_reveal()
+            except Exception:
+                self.library_tuning_page.refresh_from_app()
+            if self._is_run_busy():
+                self._set_busy_state()
+
+        elif name == "preferences" and self.preferences_page is not None:
+            self.preferences_page.refresh_from_app()
+            if self._is_run_busy():
+                self.preferences_page.set_controls_state("disabled")
+            else:
+                self.preferences_page.set_controls_state("normal")
+            try:
+                self.preferences_page.settle_layout_for_reveal()
+            except Exception:
+                try:
+                    self.preferences_page._apply_scheduled_preferences_layout()
+                except Exception:
+                    pass
+
+        self.update_idletasks()
 
     def _show_main_page(self, name: str) -> None:
-        if name == self._active_main_page:
+        if name == self._active_main_page or self._panel_fade.active:
             return
 
         prev_page = self._active_main_page
+        target_page = self._ensure_main_page_for_transition(name)
+        if target_page is None:
+            return
 
         self.btn_nav_process.configure(**self._tab_button_style(active=name == "process"))
         self.btn_nav_library.configure(**self._tab_button_style(active=name == "library"))
         self.btn_nav_preferences.configure(**self._tab_button_style(active=name == "preferences"))
 
         def swap() -> None:
-            if name == "library" and self.library_tuning_page is None:
-                from gui_library_tuning import LibraryTuningPage
-
-                self.library_tuning_page = LibraryTuningPage(self, self.pages_container)
-                self.library_tuning_page.grid(row=0, column=0, sticky="nsew")
-
-            if name == "preferences":
-                self._ensure_preferences_page()
-
             page_map = {
                 "process": self.process_page,
                 "library": self.library_tuning_page,
@@ -1031,28 +1096,28 @@ class App(WaveformMixin, ctk.CTk):
                 if page is None:
                     continue
                 if page_name == name:
-                    page.grid()
+                    page.grid(row=0, column=0, sticky="nsew")
+                    try:
+                        page.tkraise()
+                    except Exception:
+                        pass
                 else:
                     page.grid_remove()
 
             self._active_main_page = name
 
-        def after_swap() -> None:
-            if prev_page == "preferences" and name != "preferences":
-                self._flush_main_page_visuals()
+        settle_ms = {
+            "process": 130,
+            "library": 190,
+            "preferences": 150,
+        }.get(name, 150)
 
-            if name == "library" and self.library_tuning_page is not None:
-                self.library_tuning_page.refresh_from_app()
-                if self._is_run_busy():
-                    self._set_busy_state()
-            if name == "preferences" and self.preferences_page is not None:
-                self.preferences_page.refresh_from_app()
-                if self._is_run_busy():
-                    self.preferences_page.set_controls_state("disabled")
-                else:
-                    self.preferences_page.set_controls_state("normal")
-
-        self._fade_panel_swap(self.pages_container, swap, on_complete=after_swap)
+        self._fade_panel_swap(
+            self.pages_container,
+            swap,
+            before_reveal=lambda: self._prepare_main_page_for_reveal(name, prev_page),
+            settle_ms=settle_ms,
+        )
 
     def _show_output_tab(self, name: str) -> None:
         """Show the compact output panel tab without the extra CTkTabview top padding."""
@@ -1078,7 +1143,12 @@ class App(WaveformMixin, ctk.CTk):
                 self.log_panel.grid_remove()
                 self.waveform_panel.grid()
 
-        self._fade_panel_swap(self.output_content, swap)
+        self._fade_panel_swap(
+            self.output_content,
+            swap,
+            before_reveal=lambda: self.update_idletasks(),
+            settle_ms=90,
+        )
 
     def _wire_setting_traces(self) -> None:
         self.var_folder.trace_add("write", self._on_analysis_setting_changed)
