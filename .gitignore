@@ -59,3 +59,10 @@ tests/
 .env.*
 !.env.example
 .envrc
+# Added by code-review-graph
+.code-review-graph/
+.cursor/mcp.json
+.cursorrules
+.github/code-review-graph.instruction.md
+.mcp.json
+AGENTS.md
