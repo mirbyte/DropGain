@@ -53,6 +53,7 @@ dropgain_report.csv
 # Local assets / test material
 test tracks/
 tests/
+CRG/
 
 # Env / secrets
 .env
