@@ -20,7 +20,8 @@ from jobs import DropGainSettings, recompute_row_decision
 TARGET_BAND_MIN = -12.0
 TARGET_BAND_MAX = -5.0
 TARGET_BAND_WIDTH = 1.0
-CLEAN_ACHIEVABLE_PERCENTILE = 40.0
+LOUDEST_ANCHOR_PERCENTILE = 35.0
+CLEAN_ACHIEVABLE_PERCENTILE = 30.0
 HEAVY_LIMITER_MAX_RATIO = 0.10
 HEAVY_LIMITER_MAX_ABS = 2
 REFINE_STEP_DB = 0.5
@@ -238,13 +239,13 @@ def _candidate_target_band(
     peak_ceiling_dbfs: float,
     loudest_fallback: list[float] | None = None,
 ) -> tuple[float, float]:
-    """Pick a 1 dB target band anchored to the library median and headroom."""
+    """Pick a 1 dB target band anchored to library loudness and headroom."""
     measurements = _trustworthy_measurements(rows)
     if not measurements:
         if loudest_fallback:
-            median_loudest = _percentile(loudest_fallback, 50)
-            if median_loudest is not None:
-                return _band_from_center(median_loudest)
+            anchor_loudest = _percentile(loudest_fallback, LOUDEST_ANCHOR_PERCENTILE)
+            if anchor_loudest is not None:
+                return _band_from_center(anchor_loudest)
         return -8.0, -7.0
 
     loudest_values = [loudest for loudest, _ in measurements]
@@ -253,9 +254,9 @@ def _candidate_target_band(
         for loudest, true_peak in measurements
     ]
 
-    median_loudest = _percentile(loudest_values, 50) or -8.0
+    anchor_loudest = _percentile(loudest_values, LOUDEST_ANCHOR_PERCENTILE) or -8.0
     safe_ceiling = _percentile(clean_max_values, CLEAN_ACHIEVABLE_PERCENTILE)
-    center = median_loudest
+    center = anchor_loudest
     if safe_ceiling is not None:
         center = min(center, safe_ceiling - (TARGET_BAND_WIDTH / 2.0))
 
@@ -368,7 +369,7 @@ def recommend_settings(rows: list[TrackRow], current: DropGainSettings) -> Recom
     notes: list[str] = []
     if recommendation_loudest:
         notes.append(
-            "Target anchored to library median loudest section, capped by true-peak headroom."
+            "Target anchored to library p35 loudest section, capped by true-peak headroom."
         )
         below_target = sum(
             1
