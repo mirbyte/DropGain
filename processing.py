@@ -2631,8 +2631,8 @@ def _process_audio_with_prol2_gain_impl(
         )
 
         plugin_input = audio_to_pedalboard_shape(audio)
-        # reset=False avoids a plugin reload between buffers on the host thread.
-        plugin_output = plugin(plugin_input, float(sr), buffer_size=PROL2_PROCESS_BUFFER_SIZE, reset=False)
+        # reset=True: pedalboard trims Pro-L 2 plugin latency, False leaves leading silence.
+        plugin_output = plugin(plugin_input, float(sr), buffer_size=PROL2_PROCESS_BUFFER_SIZE, reset=True)
         processed = audio_from_pedalboard_shape(plugin_output, channels, audio.shape[0])
         del plugin
 
