@@ -16,6 +16,7 @@ from analysis import (
     MIN_LOUD_SECTION_HOP_SECONDS,
     MIN_ANALYSIS_WORKER_THREADS,
     MIN_LOUD_SECTION_WINDOW_SECONDS,
+    LIMITER_ENGINE_CHOICES,
     MP3_MIN_ABS_GAIN_DB,
     NORMALIZATION_MODE_CHOICES,
     OUTPUT_FORMAT_MODE_CHOICES,
@@ -222,7 +223,7 @@ class PreferencesPage(ctk.CTkFrame):
         ).pack(side="left")
         self.btn_system_check = app._button(
             footer,
-            text="Check Pro-L 2 / System",
+            text="Check Limiter / System",
             command=app._run_system_check,
         )
         self.btn_system_check.configure(
@@ -233,6 +234,7 @@ class PreferencesPage(ctk.CTkFrame):
 
         app.lbl_output_format_hint = self.lbl_output_format_hint
         app.mode_menu = self.mode_menu
+        app.limiter_engine_menu = self.limiter_engine_menu
         app.output_format_menu = self.output_format_menu
         app.chk_allow_risky_true_peak_boost = self.chk_allow_risky_true_peak_boost
         app.chk_apply_render_gain_threshold = self.chk_apply_render_gain_threshold
@@ -343,6 +345,7 @@ class PreferencesPage(ctk.CTkFrame):
             number_input.configure_state(state)
         for widget in (
             self.mode_menu,
+            self.limiter_engine_menu,
             self.output_format_menu,
             self.chk_allow_risky_true_peak_boost,
             self.chk_apply_render_gain_threshold,
@@ -532,8 +535,35 @@ class PreferencesPage(ctk.CTkFrame):
         self.mode_menu.grid(row=0, column=0, sticky="ew")
         self.app._add_tooltip(
             mode_cell,
-            "Limiter-assisted can boost into Pro-L 2 while respecting the true-peak ceiling. "
+            "Limiter-assisted can boost into a limiter plugin while respecting the true-peak ceiling. "
             "Clean gain only applies gain changes that stay under the ceiling without limiter help.",
+        )
+
+        self.app._label(card, text="Limiter engine", color=FG_MUTED, bg=BG_CARD, size=SETTINGS_TEXT).grid(
+            row=4, column=0, sticky="w", pady=(12, 8)
+        )
+        limiter_engine_cell = ctk.CTkFrame(card, fg_color="transparent")
+        limiter_engine_cell.grid(row=5, column=0, sticky="ew")
+        limiter_engine_cell.grid_columnconfigure(0, weight=1)
+        self.limiter_engine_menu = ctk.CTkOptionMenu(
+            limiter_engine_cell,
+            variable=self.app.var_limiter_engine,
+            values=list(LIMITER_ENGINE_CHOICES),
+            fg_color=BG_FIELD,
+            button_color=BG_CARD,
+            button_hover_color=ICE_DIM,
+            dropdown_fg_color=BG_FIELD,
+            dropdown_hover_color=ICE_DIM,
+            dropdown_text_color=FG_MAIN,
+            text_color=FG_MAIN,
+            font=self.app._font(TYPE_BODY),
+            dropdown_font=self.app._font(TYPE_BODY),
+            height=32,
+        )
+        self.limiter_engine_menu.grid(row=0, column=0, sticky="ew")
+        self.app._add_tooltip(
+            limiter_engine_cell,
+            "Which limiter plugin renders limiter-assisted rows.",
         )
 
     def _build_output_format_card(self, card: ctk.CTkFrame) -> None:

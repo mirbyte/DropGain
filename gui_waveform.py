@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import tkinter as tk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
-from analysis import hidden_subprocess_kwargs
+from analysis import hidden_subprocess_kwargs, is_limiter_processing_engine
 from gui_theme import (
     BG_CARD,
     BORDER_COLOR,
@@ -1101,7 +1101,7 @@ class WaveformMixin:
         show_limiter_overshoot = (
             peak_control is not None
             and peak_control > 0.01
-            and "Pro-L" in processing_engine
+            and is_limiter_processing_engine(processing_engine)
             and target_low is not None
             and target_high is not None
             and target_band is not None

@@ -135,15 +135,46 @@ PEAK_CONTROL_SEVERITY_HEAVY = "heavy"
 DEFAULT_BOOST_PEAK_CEILING_DBFS = -1.0
 
 PROCESSING_ENGINE_PROL2 = "FabFilter Pro-L 2 Gain"
+PROCESSING_ENGINE_LOUDMAX = "LoudMax Gain"
 PROCESSING_ENGINE_CLEAN_GAIN = "Clean gain (no limiter)"
 DEFAULT_PROCESSING_ENGINE = PROCESSING_ENGINE_PROL2
+
+LIMITER_PROCESSING_ENGINES = {
+    PROCESSING_ENGINE_PROL2,
+    PROCESSING_ENGINE_LOUDMAX,
+}
+
+LIMITER_ENGINE_PROL2 = "FabFilter Pro-L 2"
+LIMITER_ENGINE_LOUDMAX = "LoudMax"
+LIMITER_ENGINE_CHOICES = (
+    LIMITER_ENGINE_PROL2,
+    LIMITER_ENGINE_LOUDMAX,
+)
+DEFAULT_LIMITER_ENGINE = LIMITER_ENGINE_PROL2
 
 PROL2_DEFAULT_OUTPUT_LEVEL_DBFS = -1.0
 PROL2_DEFAULT_TRUE_PEAK = True
 PROL2_DEFAULT_OVERSAMPLING = "4x"
-PROL2_DEFAULT_STYLE = "Modern"
+
+PROL2_STYLE_MODERN = "Modern"
+PROL2_STYLE_TRANSPARENT = "Transparent"
+PROL2_STYLE_SAFE = "Safe"
+PROL2_STYLE_CHOICES = (
+    PROL2_STYLE_MODERN,
+    PROL2_STYLE_TRANSPARENT,
+    PROL2_STYLE_SAFE,
+)
+# Transparent stays closest to the source instead of coloring hot EDM masters further.
+PROL2_DEFAULT_STYLE = PROL2_STYLE_TRANSPARENT
+
 PROL2_DEFAULT_PLUGIN_PATH = ""
 PROL2_PROCESS_BUFFER_SIZE = 8192
+
+LOUDMAX_DEFAULT_PLUGIN_PATH = ""
+LOUDMAX_PROCESS_BUFFER_SIZE = 8192
+# Empirical offset vs Pro-L 2 on limiter-assisted renders; LoudMax's simpler
+# brickwall path tends to land slightly quieter at the same nominal settings.
+LOUDMAX_LIMITER_CALIBRATION_DB = 0.10
 
 MP3_OUTPUT_BITRATE = "320k"
 MP3_ID3_VERSION = 3
@@ -861,6 +892,26 @@ def normalize_normalization_mode(value: object) -> str:
     return DEFAULT_NORMALIZATION_MODE
 
 
+def normalize_limiter_engine(value: object) -> str:
+    """Return a valid limiter engine string, falling back to the default."""
+    text = str(value or "").strip()
+    if text in LIMITER_ENGINE_CHOICES:
+        return text
+    return DEFAULT_LIMITER_ENGINE
+
+
+def processing_engine_for_limiter(limiter_engine: object) -> str:
+    """Return the processing-engine label a limiter-assisted row should record."""
+    if normalize_limiter_engine(limiter_engine) == LIMITER_ENGINE_LOUDMAX:
+        return PROCESSING_ENGINE_LOUDMAX
+    return PROCESSING_ENGINE_PROL2
+
+
+def is_limiter_processing_engine(value: object) -> bool:
+    """Return True when a row's processing_engine used a limiter (any engine)."""
+    return str(value or "") in LIMITER_PROCESSING_ENGINES
+
+
 def peak_control_severity_label(estimated_peak_control_db: float) -> str:
     """Classify estimated peak limiting into none/light/moderate/heavy."""
     estimated = max(0.0, float(estimated_peak_control_db))
@@ -888,12 +939,12 @@ def format_peak_control_display(
     *,
     include_percent: bool = True,
 ) -> str:
-    """Format estimated Pro-L peak control as dB and optional linear peak-reduction percent."""
+    """Format estimated limiter peak control as dB and optional linear peak-reduction percent."""
     peak = parse_optional_float(estimated_peak_control_db)
     if peak is None or peak <= 0.01:
         return "-"
 
-    uses_limiter = "Pro-L" in str(processing_engine or "")
+    uses_limiter = is_limiter_processing_engine(processing_engine)
     text = f"{peak:.2f} dB"
 
     if not uses_limiter:
@@ -1740,7 +1791,12 @@ def decide_from_measurements(
     )
 
 
-def apply_track_decision(row: TrackRow, decision: TrackDecision) -> None:
+def apply_track_decision(
+    row: TrackRow,
+    decision: TrackDecision,
+    *,
+    limiter_engine: str = DEFAULT_LIMITER_ENGINE,
+) -> None:
     """Write decision fields from TrackDecision onto a TrackRow in place."""
     row["target_low_lufs"] = decision.target_low_lufs
     row["target_high_lufs"] = decision.target_high_lufs
@@ -1761,7 +1817,7 @@ def apply_track_decision(row: TrackRow, decision: TrackDecision) -> None:
     row["true_peak_unreliable"] = decision.true_peak_unreliable
     row["manual_check_required"] = decision.manual_check_required
     row["processing_engine"] = (
-        PROCESSING_ENGINE_PROL2 if decision.uses_limiter else PROCESSING_ENGINE_CLEAN_GAIN
+        processing_engine_for_limiter(limiter_engine) if decision.uses_limiter else PROCESSING_ENGINE_CLEAN_GAIN
     )
 
 
@@ -1823,6 +1879,7 @@ def analyze_file(
     source_info: dict[str, object] | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
     allow_risky_true_peak_boost: bool = False,
+    limiter_engine: str = DEFAULT_LIMITER_ENGINE,
 ) -> TrackRow:
     """Analyze a single audio file and return a populated TrackRow dict.
 
@@ -1995,7 +2052,7 @@ def analyze_file(
         "estimated_peak_control_db": decision.estimated_peak_control_db,
         "peak_control_severity": decision.peak_control_severity,
         "processing_engine": (
-            PROCESSING_ENGINE_PROL2 if decision.uses_limiter else PROCESSING_ENGINE_CLEAN_GAIN
+            processing_engine_for_limiter(limiter_engine) if decision.uses_limiter else PROCESSING_ENGINE_CLEAN_GAIN
         ),
         "output_integrated_lufs": "",
         "output_same_section_lufs": "",
@@ -2120,7 +2177,7 @@ def collect_library_row_stats(rows: list[TrackRow]) -> LibraryRowStats:
             bass_adjustment_values.append(bass_adjustment)
 
         severity = row["peak_control_severity"] or PEAK_CONTROL_SEVERITY_NONE
-        uses_limiter = "Pro-L" in str(row["processing_engine"] or "")
+        uses_limiter = is_limiter_processing_engine(row["processing_engine"])
         if peak_control is not None and peak_control > 0.01:
             if uses_limiter:
                 limiter_severities[severity] = limiter_severities.get(severity, 0) + 1
@@ -2364,7 +2421,7 @@ def build_summary(
             gain = parse_float_or_default(row["suggested_gain_db"], 0.0)
             limit = parse_float_or_default(row["estimated_peak_control_db"], 0.0)
             true_peak = parse_float_or_default(row["true_peak_dbtp"], 0.0)
-            if "Pro-L" in str(row["processing_engine"] or ""):
+            if is_limiter_processing_engine(row["processing_engine"]):
                 peak_note = f"limit est {limit:5.2f} dB"
             else:
                 peak_note = f"TP over ceil {limit:5.2f} dB"

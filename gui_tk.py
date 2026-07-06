@@ -46,6 +46,7 @@ except ImportError as exc:
 from analysis import (
     APP_TITLE,
     DEFAULT_BOOST_PEAK_CEILING_DBFS,
+    DEFAULT_LIMITER_ENGINE,
     DEFAULT_LOUD_SECTION_HOP_SECONDS,
     DEFAULT_LOUD_SECTION_WINDOW_SECONDS,
     DEFAULT_MAX_REDUCTION_DB,
@@ -56,6 +57,7 @@ from analysis import (
     DEFAULT_TARGET_LOW_LUFS,
     DEFAULT_ANALYSIS_WORKER_THREADS,
     DEFAULT_RENDER_WORKER_THREADS,
+    LIMITER_ENGINE_LOUDMAX,
     LOSSLESS_MIN_ABS_GAIN_DB,
     MAX_ANALYSIS_WORKER_THREADS,
     MIN_ANALYSIS_WORKER_THREADS,
@@ -70,6 +72,7 @@ from analysis import (
     default_csv_path,
     format_peak_control_display,
     hidden_subprocess_kwargs,
+    normalize_limiter_engine,
     normalize_normalization_mode,
     normalize_output_format_mode,
     output_format_mode_description,
@@ -86,7 +89,13 @@ from jobs import (
     run_batch_job,
     run_processing_job,
 )
-from processing import find_prol2_plugin_path, shutdown_prol2_render_host, verify_prol2_plugin
+from processing import (
+    find_loudmax_plugin_path,
+    find_prol2_plugin_path,
+    shutdown_prol2_render_host,
+    verify_loudmax_plugin,
+    verify_prol2_plugin,
+)
 from gui_waveform import WaveformMixin
 from gui_theme import *  # noqa: F403
 from gui_utils import (  # noqa: F401
@@ -180,6 +189,7 @@ class App(WaveformMixin, ctk.CTk):
         self.preferences_page = None
         self.lbl_output_format_hint = None
         self.mode_menu = None
+        self.limiter_engine_menu = None
         self.output_format_menu = None
         self.chk_allow_risky_true_peak_boost = None
         self.chk_apply_render_gain_threshold = None
@@ -431,6 +441,7 @@ class App(WaveformMixin, ctk.CTk):
                 "max_reduction": float(self.var_max_reduction.get()),
                 "peak_ceiling": float(self.var_peak_ceiling.get()),
                 "normalization_mode": normalize_normalization_mode(self.var_normalization_mode.get()),
+                "limiter_engine": normalize_limiter_engine(self.var_limiter_engine.get()),
                 "mp3_threshold": float(self.var_mp3_threshold.get()),
                 "lossless_threshold": float(self.var_lossless_threshold.get()),
                 "output_format_mode": normalize_output_format_mode(self.var_output_format_mode.get()),
@@ -856,6 +867,9 @@ class App(WaveformMixin, ctk.CTk):
         self.var_normalization_mode = tk.StringVar(
             value=normalize_normalization_mode(settings.get("normalization_mode", DEFAULT_NORMALIZATION_MODE))
         )
+        self.var_limiter_engine = tk.StringVar(
+            value=normalize_limiter_engine(settings.get("limiter_engine", DEFAULT_LIMITER_ENGINE))
+        )
         self.var_output_format_mode = tk.StringVar(
             value=normalize_output_format_mode(settings.get("output_format_mode", DEFAULT_OUTPUT_FORMAT_MODE))
         )
@@ -1166,6 +1180,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_mp3_threshold,
             self.var_lossless_threshold,
             self.var_normalization_mode,
+            self.var_limiter_engine,
             self.var_output_format_mode,
             self.var_allow_risky_true_peak_boost,
         ):
@@ -1798,6 +1813,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_max_reduction.set(DEFAULT_MAX_REDUCTION_DB)
             self.var_peak_ceiling.set(DEFAULT_BOOST_PEAK_CEILING_DBFS)
             self.var_normalization_mode.set(DEFAULT_NORMALIZATION_MODE)
+            self.var_limiter_engine.set(DEFAULT_LIMITER_ENGINE)
             self.var_mp3_threshold.set(MP3_MIN_ABS_GAIN_DB)
             self.var_lossless_threshold.set(LOSSLESS_MIN_ABS_GAIN_DB)
             self.var_output_format_mode.set(DEFAULT_OUTPUT_FORMAT_MODE)
@@ -1892,16 +1908,28 @@ class App(WaveformMixin, ctk.CTk):
             except Exception as exc:
                 add(module_name, False, str(exc))
 
-        try:
-            plugin_path, plugin_detail = verify_prol2_plugin()
-            add("FabFilter Pro-L 2 VST3", True, plugin_detail)
-        except Exception as exc:
+        if normalize_limiter_engine(self.var_limiter_engine.get()) == LIMITER_ENGINE_LOUDMAX:
             try:
-                plugin_path = find_prol2_plugin_path()
-                add("FabFilter Pro-L 2 VST3 path", True, plugin_path)
-            except Exception:
-                pass
-            add("FabFilter Pro-L 2 preflight", False, str(exc))
+                plugin_path, plugin_detail = verify_loudmax_plugin()
+                add("LoudMax VST3", True, plugin_detail)
+            except Exception as exc:
+                try:
+                    plugin_path = find_loudmax_plugin_path()
+                    add("LoudMax VST3 path", True, plugin_path)
+                except Exception:
+                    pass
+                add("LoudMax preflight", False, str(exc))
+        else:
+            try:
+                plugin_path, plugin_detail = verify_prol2_plugin()
+                add("FabFilter Pro-L 2 VST3", True, plugin_detail)
+            except Exception as exc:
+                try:
+                    plugin_path = find_prol2_plugin_path()
+                    add("FabFilter Pro-L 2 VST3 path", True, plugin_path)
+                except Exception:
+                    pass
+                add("FabFilter Pro-L 2 preflight", False, str(exc))
 
         folder = self.var_folder.get().strip()
         if folder:
@@ -1991,6 +2019,7 @@ class App(WaveformMixin, ctk.CTk):
             max_reduction = max(0.0, float(self.var_max_reduction.get()))
             peak_ceiling = float(self.var_peak_ceiling.get())
             normalization_mode = normalize_normalization_mode(self.var_normalization_mode.get())
+            limiter_engine = normalize_limiter_engine(self.var_limiter_engine.get())
             write_csv = bool(self.var_write_csv.get())
             mp3_threshold = max(0.0, float(self.var_mp3_threshold.get()))
             lossless_threshold = max(0.0, float(self.var_lossless_threshold.get()))
@@ -2060,6 +2089,7 @@ class App(WaveformMixin, ctk.CTk):
         self._logger.info("-" * 78)
         self._logger.info("Mode:   %s", mode_text)
         self._logger.info("Gain:   %s", normalization_mode)
+        self._logger.info("Limiter: %s", limiter_engine)
         if pipeline == "review_render":
             self._logger.info("Analysis workers: not used")
         else:
@@ -2100,6 +2130,7 @@ class App(WaveformMixin, ctk.CTk):
                 max_reduction,
                 peak_ceiling,
                 normalization_mode,
+                limiter_engine,
                 workers,
                 pipeline,
                 write_csv,
@@ -2181,6 +2212,7 @@ class App(WaveformMixin, ctk.CTk):
         max_reduction: float,
         peak_ceiling: float,
         normalization_mode: str,
+        limiter_engine: str,
         workers: int,
         pipeline: str,
         write_csv: bool,
@@ -2205,6 +2237,7 @@ class App(WaveformMixin, ctk.CTk):
                 max_reduction_db=max_reduction,
                 peak_ceiling_dbfs=peak_ceiling,
                 normalization_mode=normalization_mode,
+                limiter_engine=limiter_engine,
                 analysis_workers=workers,
                 render_workers=DEFAULT_RENDER_WORKER_THREADS,
                 analyze_only=(pipeline == "analyze_only"),
@@ -2525,6 +2558,7 @@ class App(WaveformMixin, ctk.CTk):
                 max_reduction_db=max(0.0, float(self.var_max_reduction.get())),
                 peak_ceiling_dbfs=float(self.var_peak_ceiling.get()),
                 normalization_mode=normalize_normalization_mode(self.var_normalization_mode.get()),
+                limiter_engine=normalize_limiter_engine(self.var_limiter_engine.get()),
                 analysis_workers=workers,
                 render_workers=DEFAULT_RENDER_WORKER_THREADS,
                 analyze_only=True,

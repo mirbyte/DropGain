@@ -63,6 +63,11 @@ from analysis import (
     MIN_OUTPUT_FILE_BYTES,
     MP3_ENCODE_TRUE_PEAK_LIFT_DB,
     NORMALIZATION_MODE_LIMITER_ASSISTED,
+    DEFAULT_LIMITER_ENGINE,
+    LIMITER_ENGINE_LOUDMAX,
+    LOUDMAX_DEFAULT_PLUGIN_PATH,
+    LOUDMAX_LIMITER_CALIBRATION_DB,
+    LOUDMAX_PROCESS_BUFFER_SIZE,
     MP3_ID3_VERSION,
     MP3_OUTPUT_BITRATE,
     PIONEER_COMPATIBLE_AIFF_CODECS,
@@ -72,6 +77,7 @@ from analysis import (
     POST_VERIFY_PROCESSED_AUDIO,
     PROCESS_OVERWRITE_EXISTING,
     PROCESSING_ENGINE_CLEAN_GAIN,
+    PROCESSING_ENGINE_LOUDMAX,
     PROCESSING_ENGINE_PROL2,
     PROL2_DEFAULT_OUTPUT_LEVEL_DBFS,
     PROL2_DEFAULT_OVERSAMPLING,
@@ -96,12 +102,14 @@ from analysis import (
     min_abs_gain_for_extension,
     measure_lufs,
     measure_lufs_input,
+    normalize_limiter_engine,
     normalize_output_format_mode,
     measure_section_and_whole_true_peak_oversampled,
     parse_float_or_default,
     parse_int_or_default,
     pioneer_compatible_aiff_codec,
     pioneer_compatible_aiff_sample_rate,
+    processing_engine_for_limiter,
     is_aiff_output,
     requires_pioneer_compatible_aiff,
     round_or_blank,
@@ -1851,6 +1859,32 @@ def verify_prol2_plugin(configured_path: str | None = None) -> tuple[str, str]:
     return get_prol2_render_host().run(_verify_prol2_plugin_impl, configured_path)
 
 
+def _verify_loudmax_plugin_impl(configured_path: str | None = None) -> tuple[str, str]:
+    """Load LoudMax on the render host thread and verify exposed parameters."""
+    try:
+        from pedalboard import load_plugin
+    except Exception as exc:
+        raise RuntimeError("pedalboard is required for LoudMax processing") from exc
+
+    plugin_path = find_loudmax_plugin_path(configured_path)
+    plugin = load_plugin(plugin_path)
+    names = plugin_parameter_names(plugin)
+
+    configure_loudmax_for_gain(
+        plugin,
+        output_level_dbfs=PROL2_DEFAULT_OUTPUT_LEVEL_DBFS,
+        true_peak=True,
+    )
+
+    detail = f"{plugin_path} ({len(names)} parameters exposed, true peak enabled)"
+    return plugin_path, detail
+
+
+def verify_loudmax_plugin(configured_path: str | None = None) -> tuple[str, str]:
+    """Load LoudMax and verify required pedalboard parameters are exposed."""
+    return get_prol2_render_host().run(_verify_loudmax_plugin_impl, configured_path)
+
+
 def finalize_processed_render(
     row: TrackRow,
     *,
@@ -2117,6 +2151,54 @@ def find_prol2_plugin_path(configured_path: str | None = None) -> str:
     )
 
 
+_cached_loudmax_path: str | None = None
+
+
+def find_loudmax_plugin_path(configured_path: str | None = None) -> str:
+    """Locate LoudMax VST3: configured path > env > auto-find in common VST3 roots.
+
+    The result is cached after the first successful lookup so subsequent calls
+    in the same process skip the filesystem scan.
+    """
+    global _cached_loudmax_path
+
+    if configured_path:
+        p = Path(configured_path).expanduser()
+        if p.exists():
+            return str(p)
+        raise RuntimeError(f"Configured LoudMax plugin path does not exist: {p}")
+
+    env_path = os.environ.get("LOUDMAX_PLUGIN_PATH", "").strip()
+    if env_path:
+        p = Path(env_path).expanduser()
+        if p.exists():
+            return str(p)
+        raise RuntimeError(f"LOUDMAX_PLUGIN_PATH does not exist: {p}")
+
+    if _cached_loudmax_path is not None:
+        return _cached_loudmax_path
+
+    matches: list[Path] = []
+    for root in common_vst3_roots():
+        try:
+            matches.extend(root.rglob("*LoudMax*.vst3"))
+        except Exception:
+            continue
+        if matches:
+            break
+
+    unique = sorted(set(matches), key=lambda p: (len(str(p)), str(p)))
+    if unique:
+        _cached_loudmax_path = str(unique[0])
+        return _cached_loudmax_path
+
+    roots = "\n".join(f"  - {p}" for p in common_vst3_roots()) or "  - no standard VST3 roots found"
+    raise RuntimeError(
+        "Could not auto-find LoudMax VST3. Set LOUDMAX_PLUGIN_PATH to the .vst3 path.\n"
+        f"Searched:\n{roots}"
+    )
+
+
 def plugin_parameter_names(plugin: Any) -> list[str]:
     """Safely read parameter names from a pedalboard VST3 plugin."""
     try:
@@ -2129,7 +2211,7 @@ def set_plugin_parameter(plugin: Any, name: str, candidates: Iterable[Any]) -> A
     """Try setting a VST3 parameter using a list of candidate value types."""
     names = plugin_parameter_names(plugin)
     if names and name not in names:
-        raise RuntimeError(f"Pro-L 2 parameter {name!r} was not exposed through pedalboard")
+        raise RuntimeError(f"plugin parameter {name!r} was not exposed through pedalboard")
 
     last_exc: Exception | None = None
     tried: list[str] = []
@@ -2145,13 +2227,59 @@ def set_plugin_parameter(plugin: Any, name: str, candidates: Iterable[Any]) -> A
             last_exc = exc
 
     if last_exc is None:
-        raise RuntimeError(f"Could not set Pro-L 2 parameter {name!r}")
+        raise RuntimeError(f"Could not set plugin parameter {name!r}")
 
     short = ", ".join(tried[:10])
     if len(tried) > 10:
         short += f", ... ({len(tried)} candidates tried)"
     message = str(last_exc).splitlines()[0]
-    raise RuntimeError(f"Could not set Pro-L 2 parameter {name!r}. Tried {short}. Last error: {message}") from last_exc
+    raise RuntimeError(f"Could not set plugin parameter {name!r}. Tried {short}. Last error: {message}") from last_exc
+
+
+def resolve_parameter_name(plugin: Any, candidates: Iterable[str]) -> str | None:
+    """Resolve a logical parameter name to the exact name pedalboard exposes.
+
+    Tries exact (case-insensitive) matches first, then falls back to
+    alphanumeric-only comparison so names like "output_db" match "Output".
+    """
+    names = plugin_parameter_names(plugin)
+    by_lower = {name.lower(): name for name in names}
+
+    for candidate in candidates:
+        exact = by_lower.get(candidate.lower())
+        if exact is not None:
+            return exact
+
+    compact = {
+        "".join(ch for ch in name.lower() if ch.isalnum()): name
+        for name in names
+    }
+    for candidate in candidates:
+        key = "".join(ch for ch in candidate.lower() if ch.isalnum())
+        exact = compact.get(key)
+        if exact is not None:
+            return exact
+
+    return None
+
+
+def set_required_plugin_parameter(
+    plugin: Any,
+    *,
+    plugin_label: str,
+    logical_name: str,
+    parameter_names: Iterable[str],
+    candidates: Iterable[Any],
+) -> Any:
+    """Resolve and set a mandatory plugin parameter, failing closed if it is missing."""
+    name = resolve_parameter_name(plugin, parameter_names)
+    if name is None:
+        exposed = ", ".join(plugin_parameter_names(plugin))
+        raise RuntimeError(
+            f"{plugin_label} {logical_name} parameter was not exposed through pedalboard. "
+            f"Exposed parameters: {exposed}"
+        )
+    return set_plugin_parameter(plugin, name, candidates)
 
 
 def prol2_numeric_candidates(value: float) -> list[Any]:
@@ -2199,8 +2327,20 @@ def configure_prol2_for_gain(
     if "host_bypass" in names:
         set_plugin_parameter(plugin, "host_bypass", ["Not Bypassed", False, 0, "Off"])
 
-    if style and "style" in names:
-        set_plugin_parameter(plugin, "style", [style, style.title(), style.lower(), style.upper()])
+    if style:
+        if "style" not in names:
+            raise RuntimeError("FabFilter Pro-L 2 style parameter was not exposed through pedalboard")
+
+        actual_style = set_plugin_parameter(
+            plugin,
+            "style",
+            [style, style.title(), style.lower(), style.upper()],
+        )
+
+        if str(actual_style).strip().lower() != str(style).strip().lower():
+            raise RuntimeError(
+                f"FabFilter Pro-L 2 style did not stick: requested {style!r}, got {actual_style!r}"
+            )
 
     if oversampling and "oversampling" in names:
         set_plugin_parameter(
@@ -2220,6 +2360,69 @@ def configure_prol2_for_gain(
     if "gain" not in names:
         raise RuntimeError("FabFilter Pro-L 2 gain parameter was not exposed through pedalboard")
     set_plugin_parameter(plugin, "gain", prol2_numeric_candidates(gain_db))
+
+
+# LoudMax (build verified via pedalboard) exposes: bypass, fader_link,
+# isp_detection, large_gui, output_db, thresh_db. Real names go first;
+# the rest are fallbacks for other LoudMax builds/versions.
+LOUDMAX_TRUE_PEAK_PARAMETER_NAMES = (
+    "isp_detection",
+    "isp",
+    "true_peak",
+    "true_peak_limiting",
+)
+
+LOUDMAX_OUTPUT_PARAMETER_NAMES = (
+    "output_db",
+    "output",
+    "ceiling",
+    "limit",
+)
+
+LOUDMAX_THRESHOLD_PARAMETER_NAMES = (
+    "thresh_db",
+    "threshold",
+    "thresh",
+)
+
+
+def configure_loudmax_for_gain(
+    plugin: Any,
+    *,
+    output_level_dbfs: float,
+    true_peak: bool = True,
+) -> None:
+    """Configure a LoudMax plugin instance as a peak-safety limiter.
+
+    DropGain applies compensated pre-gain before LoudMax; threshold stays
+    neutral and output_db is the ceiling trim. True peak/ISP is mandatory.
+    """
+    names = set(plugin_parameter_names(plugin))
+
+    if "bypass" in names:
+        set_plugin_parameter(plugin, "bypass", ["Not Bypassed", False, 0, "Off"])
+    if "fader_link" in names:
+        set_plugin_parameter(plugin, "fader_link", prol2_bool_candidates(False))
+
+    set_required_plugin_parameter(
+        plugin,
+        plugin_label="LoudMax",
+        logical_name="true-peak/ISP",
+        parameter_names=LOUDMAX_TRUE_PEAK_PARAMETER_NAMES,
+        candidates=prol2_bool_candidates(true_peak),
+    )
+
+    set_required_plugin_parameter(
+        plugin,
+        plugin_label="LoudMax",
+        logical_name="output/ceiling",
+        parameter_names=LOUDMAX_OUTPUT_PARAMETER_NAMES,
+        candidates=prol2_numeric_candidates(output_level_dbfs),
+    )
+
+    threshold_name = resolve_parameter_name(plugin, LOUDMAX_THRESHOLD_PARAMETER_NAMES)
+    if threshold_name is not None:
+        set_plugin_parameter(plugin, threshold_name, prol2_numeric_candidates(0.0))
 
 
 def decode_audio_ffmpeg_at_sample_rate(path: str, channels: int, sample_rate: int) -> np.ndarray:
@@ -2515,6 +2718,144 @@ def process_audio_with_prol2_gain(
     )
 
 
+def _process_audio_with_loudmax_gain_impl(
+    input_path: str,
+    output_path: str,
+    gain_db: float,
+    source_info: dict[str, object],
+    plugin_path: str | None = None,
+    output_level_dbfs: float = PROL2_DEFAULT_OUTPUT_LEVEL_DBFS,
+    post_loudness_start_sec: float | None = None,
+    post_loudness_end_sec: float | None = None,
+    post_target_high_lufs: float | None = None,
+    output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+) -> dict[str, object]:
+    """Render audio through LoudMax on the dedicated host thread.
+
+    LoudMax's output_db acts as a final ceiling trim, so external pre-gain
+    uses compensated drive (gain_db - output_level_dbfs) plus a small
+    LoudMax-only calibration offset. Threshold stays neutral; true-peak/ISP
+    catches peaks above the ceiling.
+    """
+    ext = Path(input_path).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise RuntimeError(f"processing not supported for {ext}")
+    if os.path.exists(output_path) and not PROCESS_OVERWRITE_EXISTING:
+        raise RuntimeError("output already exists")
+
+    output_parent = os.path.dirname(os.path.abspath(output_path))
+    if output_parent:
+        os.makedirs(output_parent, exist_ok=True)
+
+    try:
+        from pedalboard import load_plugin
+    except Exception as exc:
+        raise RuntimeError("pedalboard is required for LoudMax processing") from exc
+
+    sr = parse_int_or_default(source_info.get("sample_rate"), 0)
+    channels = parse_int_or_default(source_info.get("channels"), 0)
+    if sr <= 0 or channels <= 0:
+        raise RuntimeError("invalid sample rate or channel count")
+
+    with benchmark_timer("render"):
+        audio = decode_audio_ffmpeg_at_sample_rate(input_path, channels, sr)
+
+        compensated_drive_db = (
+            float(gain_db) - float(output_level_dbfs) + LOUDMAX_LIMITER_CALIBRATION_DB
+        )
+        if abs(compensated_drive_db) > 0.000001:
+            audio = apply_linear_gain(audio, compensated_drive_db)
+
+        plugin_file = find_loudmax_plugin_path(plugin_path or LOUDMAX_DEFAULT_PLUGIN_PATH)
+        plugin = load_plugin(plugin_file)
+        configure_loudmax_for_gain(
+            plugin,
+            output_level_dbfs=output_level_dbfs,
+            true_peak=True,
+        )
+
+        plugin_input = audio_to_pedalboard_shape(audio)
+        plugin_output = plugin(plugin_input, float(sr), buffer_size=LOUDMAX_PROCESS_BUFFER_SIZE, reset=False)
+        processed = audio_from_pedalboard_shape(plugin_output, channels, audio.shape[0])
+        del plugin
+
+        post_trim_db = 0.0
+        post_trim_note = ""
+        if (
+            post_target_high_lufs is not None
+            and post_loudness_start_sec is not None
+            and post_loudness_end_sec is not None
+        ):
+            try:
+                rendered_section_lufs = section_lufs_from_audio(
+                    processed,
+                    sr,
+                    post_loudness_start_sec,
+                    post_loudness_end_sec,
+                )
+                if rendered_section_lufs > float(post_target_high_lufs) + POST_LIMITER_TRIM_EPSILON_LU:
+                    post_trim_db = float(post_target_high_lufs) - rendered_section_lufs
+                    processed = apply_linear_gain(processed, post_trim_db)
+                    post_trim_note = (
+                        f"post-limiter clean trim {post_trim_db:.2f} dB "
+                        f"to keep loudest section within target"
+                    )
+            except Exception as exc:
+                post_trim_note = f"post-limiter loudness trim skipped: {exc}"
+
+        encode_float_audio_ffmpeg(
+            processed,
+            input_path,
+            output_path,
+            source_info,
+            output_format_mode=output_format_mode,
+        )
+
+    output_info = finalize_processed_output(
+        input_path,
+        output_path,
+        source_info,
+        output_format_mode=output_format_mode,
+    )
+    output_info["_processing_engine"] = PROCESSING_ENGINE_LOUDMAX
+    output_info["_limiter_used"] = True
+    output_info["_pre_limiter_gain_db"] = compensated_drive_db
+    output_info["_plugin_gain_db"] = 0.0
+    output_info["_compensated_drive_db"] = compensated_drive_db
+    output_info["_loudmax_calibration_db"] = LOUDMAX_LIMITER_CALIBRATION_DB
+    output_info["_post_limiter_trim_db"] = post_trim_db
+    output_info["_post_limiter_note"] = post_trim_note
+    return output_info
+
+
+def process_audio_with_loudmax_gain(
+    input_path: str,
+    output_path: str,
+    gain_db: float,
+    source_info: dict[str, object],
+    plugin_path: str | None = None,
+    output_level_dbfs: float = PROL2_DEFAULT_OUTPUT_LEVEL_DBFS,
+    post_loudness_start_sec: float | None = None,
+    post_loudness_end_sec: float | None = None,
+    post_target_high_lufs: float | None = None,
+    output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+) -> dict[str, object]:
+    """Render audio through LoudMax and encode to the target format."""
+    return get_prol2_render_host().run(
+        _process_audio_with_loudmax_gain_impl,
+        input_path,
+        output_path,
+        gain_db,
+        source_info,
+        plugin_path,
+        output_level_dbfs,
+        post_loudness_start_sec,
+        post_loudness_end_sec,
+        post_target_high_lufs,
+        output_format_mode,
+    )
+
+
 def process_audio_with_gain(
     input_path: str,
     output_path: str,
@@ -2528,12 +2869,26 @@ def process_audio_with_gain(
     post_loudness_end_sec: float | None = None,
     post_target_high_lufs: float | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    limiter_engine: str = DEFAULT_LIMITER_ENGINE,
 ) -> dict[str, object]:
-    """Limiter-assisted processing path using Pro-L 2.
+    """Limiter-assisted processing path, routed to the selected limiter engine.
 
     The GUI's peak-reference/output-level control is passed through here so
-    analysis, reporting, and the actual Pro-L 2 render use the same value.
+    analysis, reporting, and the actual render use the same value.
     """
+    if normalize_limiter_engine(limiter_engine) == LIMITER_ENGINE_LOUDMAX:
+        return process_audio_with_loudmax_gain(
+            input_path=input_path,
+            output_path=output_path,
+            gain_db=gain_db,
+            source_info=source_info,
+            output_level_dbfs=output_level_dbfs,
+            post_loudness_start_sec=post_loudness_start_sec,
+            post_loudness_end_sec=post_loudness_end_sec,
+            post_target_high_lufs=post_target_high_lufs,
+            output_format_mode=output_format_mode,
+        )
+
     return process_audio_with_prol2_gain(
         input_path=input_path,
         output_path=output_path,
@@ -2852,6 +3207,7 @@ def render_analyzed_row(
     source_info: dict[str, object],
     peak_ceiling_dbfs: float,
     target_high_lufs: float,
+    limiter_engine: str = DEFAULT_LIMITER_ENGINE,
     post_loudness_window_seconds: float | None = None,
     post_loudness_hop_seconds: float | None = None,
 ) -> tuple[str, str, str, str]:
@@ -2866,7 +3222,7 @@ def render_analyzed_row(
     gain = parse_float_or_default(row["suggested_gain_db"], 0.0)
     output_format_mode = row.get("output_format_mode", DEFAULT_OUTPUT_FORMAT_MODE)
     use_limiter = row_should_use_limiter(row)
-    row["processing_engine"] = PROCESSING_ENGINE_PROL2 if use_limiter else PROCESSING_ENGINE_CLEAN_GAIN
+    row["processing_engine"] = processing_engine_for_limiter(limiter_engine) if use_limiter else PROCESSING_ENGINE_CLEAN_GAIN
     base_warnings = str(row.get("warnings") or "").strip()
     render_extras: list[str] = []
 
@@ -2901,6 +3257,7 @@ def render_analyzed_row(
             post_loudness_end_sec=parse_float_or_default(row["loudest_section_end_sec"], 0.0),
             post_target_high_lufs=target_high_lufs,
             output_format_mode=output_format_mode,
+            limiter_engine=limiter_engine,
         )
         metadata_status, metadata_message, audio_status, audio_message = finalize_render_attempt(output_info)
 
@@ -2929,6 +3286,7 @@ def render_analyzed_row(
                 post_loudness_end_sec=parse_float_or_default(row["loudest_section_end_sec"], 0.0),
                 post_target_high_lufs=target_high_lufs,
                 output_format_mode=output_format_mode,
+                limiter_engine=limiter_engine,
             )
             metadata_status, metadata_message, audio_status, audio_message = finalize_render_attempt(output_info)
     else:
@@ -2991,6 +3349,7 @@ def process_track(
     apply_gain_threshold: bool = True,
     output_root: str | None = None,
     source_root: str | None = None,
+    limiter_engine: str = DEFAULT_LIMITER_ENGINE,
 ) -> tuple[TrackRow | None, str, dict[str, object] | None]:
     """Analyze one track, optionally render it, and return row, error, source info.
 
@@ -3026,10 +3385,11 @@ def process_track(
             allow_risky_true_peak_boost=allow_risky_true_peak_boost,
             output_root=output_root,
             source_root=source_root,
+            limiter_engine=limiter_engine,
         )
 
         use_limiter = row_should_use_limiter(row)
-        row["processing_engine"] = PROCESSING_ENGINE_PROL2 if use_limiter else PROCESSING_ENGINE_CLEAN_GAIN
+        row["processing_engine"] = processing_engine_for_limiter(limiter_engine) if use_limiter else PROCESSING_ENGINE_CLEAN_GAIN
 
         should_process, status = should_process_row(
             row,
@@ -3056,6 +3416,7 @@ def process_track(
                 source_info=resolved_source_info,
                 peak_ceiling_dbfs=peak_ceiling,
                 target_high_lufs=target_high,
+                limiter_engine=limiter_engine,
                 post_loudness_window_seconds=window_seconds,
                 post_loudness_hop_seconds=hop_seconds,
             )

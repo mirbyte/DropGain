@@ -22,6 +22,7 @@ from analysis import (
     APP_TITLE,
     CSV_FIELDNAMES,
     DEFAULT_APPLY_RENDER_GAIN_THRESHOLD,
+    DEFAULT_LIMITER_ENGINE,
     DEFAULT_OUTPUT_FORMAT_MODE,
     PROCESSED_SUFFIX,
     TrackRow,
@@ -32,6 +33,7 @@ from analysis import (
     decision_from_row,
     ffprobe_audio_info,
     find_audio_files,
+    is_limiter_processing_engine,
     make_error_track_row,
     processed_output_path,
     format_peak_control_display,
@@ -126,6 +128,7 @@ class DropGainSettings:
     mp3_threshold: float
     lossless_threshold: float
     output_format_mode: str = DEFAULT_OUTPUT_FORMAT_MODE
+    limiter_engine: str = DEFAULT_LIMITER_ENGINE
     allow_risky_true_peak_boost: bool = False
     apply_render_gain_threshold: bool = DEFAULT_APPLY_RENDER_GAIN_THRESHOLD
     output_root: str | None = None
@@ -260,7 +263,7 @@ def recompute_row_decision(
         normalization_mode=settings.normalization_mode,
         allow_risky_true_peak_boost=settings.allow_risky_true_peak_boost,
     )
-    apply_track_decision(row, decision)
+    apply_track_decision(row, decision, limiter_engine=settings.limiter_engine)
 
     status = str(row.get("processing_status", ""))
     if status.startswith("analyzed_") or status == "":
@@ -440,6 +443,7 @@ def run_analysis_job(
                 apply_gain_threshold=apply_gain_threshold,
                 output_root=settings.output_root,
                 source_root=settings.folder,
+                limiter_engine=settings.limiter_engine,
             )
 
             if error_msg:
@@ -548,7 +552,7 @@ def run_analysis_job(
                     peak_control_value = float(peak_control)
                 except Exception:
                     peak_control_value = 0.0
-                limiter_engine_selected = "Pro-L" in processing_engine
+                limiter_engine_selected = is_limiter_processing_engine(processing_engine)
                 if peak_control_value <= 0.01:
                     peak_text = "TP safe"
                 elif limiter_engine_selected:
@@ -872,6 +876,7 @@ def run_processing_job(
                 source_info=source_info,
                 peak_ceiling_dbfs=settings.peak_ceiling_dbfs,
                 target_high_lufs=settings.target_high_lufs,
+                limiter_engine=settings.limiter_engine,
                 post_loudness_window_seconds=settings.window_seconds,
                 post_loudness_hop_seconds=settings.hop_seconds,
             )
@@ -905,7 +910,7 @@ def run_processing_job(
                     peak_ctrl = 0.0
                 if peak_ctrl <= 0.01:
                     peak_text = "TP safe"
-                elif "Pro-L" in row["processing_engine"]:
+                elif is_limiter_processing_engine(row["processing_engine"]):
                     peak_text = (
                         "limit "
                         + format_peak_control_display(

@@ -36,13 +36,13 @@ If you work with long material:
 
 ### Throughput (author's machine)
 
-On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs have averaged around **430 tracks/hour** (typical EDM-length material, limiter-assisted mode where needed). I would not go above 4 workers on that CPU even though it has 8 cores. Your numbers will vary with CPU, disk, track length, how many tracks need Pro-L 2 vs clean gain, and output format.
+On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs have averaged around **430 tracks/hour** (typical EDM-length material, limiter-assisted mode where needed). I would not go above 4 workers on that CPU even though it has 8 cores. Your numbers will vary with CPU, disk, track length, how many tracks need limiting vs clean gain, and output format.
 
 ## What it does
 
 - **Library analysis** - recursive scan; programme and section LUFS, dBTP, sample peak, suggested gain, projections, and processing action per row
 - **Section-based targeting** - loudest sliding window (default 20 s / 5 s hop); true-peak ceiling wins over LUFS when they conflict
-- **Clean gain or limiter-assisted** - linear gain when the ceiling allows; FabFilter Pro-L 2 with `max_reduction` cap when peak control is needed
+- **Clean gain or limiter-assisted** - linear gain when the ceiling allows; a limiter engine (FabFilter Pro-L 2 or LoudMax) with `max_reduction` cap when peak control is needed
 - **Bass-aware trim** - on positive gain only; low-band energy can reduce boost on bass-heavy sections
 - **`_DG` outputs** - copies beside sources or under a separate root; preserve format, force AIFF/MP3, or decode MP3 to AIFF to avoid double lossy encode
 - **Library Tuning** - profile the library; recommend targets, window/hop, thresholds, and ceiling
@@ -67,7 +67,7 @@ Narrower than most commercial library tools on purpose: level and peak control, 
 - Want one integrated app for library management, analysis, and decks with minimal setup
 - Want clipped-peak repair, warmth, saturation, or template-style enhancement without tuning
 - Need polished vendor support and broad cross-platform QA
-- Do not want to install FFmpeg, Python, or (for full peak-limited prep) FabFilter Pro-L 2
+- Do not want to install FFmpeg, Python, or (for full peak-limited prep) a limiter plugin (FabFilter Pro-L 2 or the free LoudMax)
 
 Commercial DJ and prep tools are often the better fit for convenience, integration, and breadth. DropGain is an alternative when your workflow cares more about explicit targets, render-stage control, and a transparent path than about all-in-one polish.
 
@@ -78,7 +78,7 @@ Commercial DJ and prep tools are often the better fit for convenience, integrati
 Three reasons:
 
 1. **You want to go loud** - boosting into a true-peak ceiling without clipping requires peak control, not just turning up the fader.
-2. **You want modern EDM-style masters** - limiter-assisted mode uses FabFilter Pro-L 2 with the Modern style when clean gain is not enough. That matches how a lot of current dance music is already mastered.
+2. **You want modern EDM-style masters** - limiter-assisted mode uses a limiter (FabFilter Pro-L 2 or LoudMax, selectable in Preferences) when clean gain is not enough. That matches how a lot of current dance music is already mastered.
 3. **It is a deliberate choice** - limiter-assisted is the default because that is how I plan to prep my own library this summer. Clean gain is there when you do not want limiting. A third peak repair mode is planned for a future update.
 
 ### Why are the defaults so loud?
@@ -109,7 +109,7 @@ Platinum Notes 10 is a broader enhancement product: volume standardization, clip
 
 **Use Platinum Notes when** you want repair, warmth/saturation, template voicing, or all-in-one processing without per-track inspection.
 
-**Cost:** DropGain is free for analysis, clean-gain render, Library Tuning, CSV, and verification. **Limiter-assisted** mode needs licensed **FabFilter Pro-L 2** (VST3). Platinum Notes 10 is **98€** one-time with limiting included; the trade-off is upfront suite cost vs. owning your limiter and keeping enhancement out of the path unless you add it.
+**Cost:** DropGain is free for analysis, clean-gain render, Library Tuning, CSV, and verification. **Limiter-assisted** mode needs a limiter VST3: licensed **FabFilter Pro-L 2**, or the free **LoudMax** if you would rather not buy one. Platinum Notes 10 is **98€** one-time with limiting included; the trade-off is upfront suite cost vs. owning your limiter and keeping enhancement out of the path unless you add it.
 
 ## Operation
 
@@ -186,7 +186,7 @@ estimated_control = max(0, whole_track_TP + gain + mp3_lift - ceiling)
 `max_reduction` caps acceptable peak control. Over-budget gain is reduced by the excess. Reported as estimated peak control (dB and approximate linear amplitude reduction %).
 
 **7. Engine selection**  
-Projected section LUFS, sample peak, and true peak are stored. In limiter-assisted mode, projected true peak is capped at the ceiling when limiting is expected. Pro-L 2 is used when estimated peak control > ~0 dB; otherwise clean gain.
+Projected section LUFS, sample peak, and true peak are stored. In limiter-assisted mode, projected true peak is capped at the ceiling when limiting is expected. The selected limiter engine (FabFilter Pro-L 2 or LoudMax) is used when estimated peak control > ~0 dB; otherwise clean gain.
 
 Severity: none / light (≤1 dB) / moderate (≤3 dB) / heavy (>3 dB).
 
@@ -199,17 +199,20 @@ Skipped when in target range, |gain| below format threshold (default 0.5 dB MP3,
 Native-rate decode → linear gain (`10^(gain/20)`) → ffmpeg encode. No DSP.
 
 **Limiter-assisted (FabFilter Pro-L 2)**  
-When peak control is required. Single-threaded VST3 host (pedalboard); clean-gain renders may run in parallel.
+Default limiter engine, when peak control is required. Single-threaded VST3 host (pedalboard); clean-gain renders may run in parallel.
 
 1. Decode float32 at native rate.
 2. **Gain split** - `compensated_drive = gain_db - output_level` (output level = peak ceiling, default -1.0 dBFS). Negative component: linear pre-gain. Non-negative component: Pro-L gain parameter. Cuts are pre-plugin; boosts pass through the limiter.
-3. **Pro-L 2** - Modern style, 4× oversampling, true-peak limiting enabled, `output_level` = ceiling.
+3. **Pro-L 2** - Transparent style, 4× oversampling, true-peak limiting enabled, `output_level` = ceiling.
 4. Buffer processing via pedalboard.
 5. **Post-limiter trim** - re-measure section LUFS; if above `target_high`, apply linear correction (peak ceiling met but section still above upper LUFS bound).
 6. ffmpeg encode; metadata via mutagen with loudness-normalization tags removed.
 
+**Limiter-assisted (LoudMax)**  
+Alternate limiter engine (**Preferences → Limiter engine**), for anyone without a Pro-L 2 license. Same compensated drive as Pro-L 2 (`gain_db - output_level`) applied as linear pre-gain; LoudMax's `output_db` is the ceiling trim and its threshold stays neutral. True-peak/ISP catches peaks above the ceiling.
+
 **MP3 retry**  
-Post-encode true-peak re-measurement. One retry with reduced Pro-L output level (limiter path) or gain (clean path) if dBTP exceeds ceiling. Preserve-format MP3→MP3 skips retry.
+Post-encode true-peak re-measurement. One retry with reduced limiter output level (limiter path) or gain (clean path) if dBTP exceeds ceiling. Preserve-format MP3→MP3 skips retry.
 
 **Post-render verification**  
 Re-decode; compare section LUFS and dBTP to projections (tolerance 0.4 LU / 0.2 dB). Metadata parity check against source.
@@ -234,10 +237,10 @@ Load `_DG` copies (or your output folder) into the library you play from, not un
 ### Dependencies and launch
 
 - **FFmpeg / ffprobe** - on `PATH`
-- **FabFilter Pro-L 2** (VST3) - limiter-assisted path via `pedalboard`; `PROL2_PLUGIN_PATH` or auto-discovery
+- A limiter VST3 for limiter-assisted mode, selected in **Preferences → Limiter engine**: **FabFilter Pro-L 2** (`PROL2_PLUGIN_PATH` or auto-discovery) or **LoudMax**, free (`LOUDMAX_PLUGIN_PATH` or auto-discovery)
 - **Python** - `customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`
 
-Launch `main.pyw`. **Preferences → Check Pro-L 2 / System** validates the toolchain before batch render.
+Launch `main.pyw`. **Preferences → Check Limiter / System** validates the toolchain before batch render.
 
 ### Code layout
 
@@ -252,7 +255,7 @@ Launch `main.pyw`. **Preferences → Check Pro-L 2 / System** validates the tool
 | `gui_theme.py` | Shared colors, typography, layout constants, table column defs |
 | `gui_utils.py` | DPI awareness, tooltips, queue log handler, window sizing |
 | `analysis.py` | Measurement, gain logic, discovery, CSV schema |
-| `processing.py` | Render paths, Pro-L 2 host, metadata |
+| `processing.py` | Render paths, limiter (Pro-L 2 / LoudMax) host, metadata |
 | `jobs.py` | Analyze / render / batch jobs, worker pools |
 | `optimizer.py` | Library profiling, settings recommendations |
 

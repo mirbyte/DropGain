@@ -11,6 +11,7 @@ from analysis import (
     PEAK_CONTROL_SEVERITY_HEAVY,
     TrackRow,
     collect_library_row_stats,
+    is_limiter_processing_engine,
     parse_float_or_default,
     parse_optional_float,
 )
@@ -82,7 +83,7 @@ class RecommendedSettings:
 
 
 def _row_uses_limiter(row: TrackRow) -> bool:
-    return "Pro-L" in str(row.get("processing_engine", ""))
+    return is_limiter_processing_engine(row.get("processing_engine", ""))
 
 
 def peak_control_stats(rows: list[TrackRow]) -> PeakControlStats:
@@ -276,6 +277,7 @@ def _settings_with_targets(
         max_reduction_db=current.max_reduction_db,
         peak_ceiling_dbfs=current.peak_ceiling_dbfs,
         normalization_mode=current.normalization_mode,
+        limiter_engine=current.limiter_engine,
         analysis_workers=current.analysis_workers,
         render_workers=current.render_workers,
         analyze_only=True,

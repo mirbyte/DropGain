@@ -33,6 +33,7 @@ from gui_utils import ui_scale_for
 from analysis import (
     NORMALIZATION_MODE_LIMITER_ASSISTED,
     PEAK_CONTROL_SEVERITY_HEAVY,
+    is_limiter_processing_engine,
     parse_float_or_default,
 )
 from jobs import DropGainSettings, recompute_row_decision
@@ -528,6 +529,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             max_reduction_db=preview_budget,
             peak_ceiling_dbfs=settings.peak_ceiling_dbfs,
             normalization_mode=settings.normalization_mode,
+            limiter_engine=settings.limiter_engine,
             analysis_workers=settings.analysis_workers,
             render_workers=settings.render_workers,
             analyze_only=True,
@@ -553,7 +555,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             if row.get("processing_status") == "analyzed_would_process":
                 would_render += 1
             peak_control = parse_float_or_default(row.get("estimated_peak_control_db", ""), 0.0)
-            uses_limiter = "Pro-L" in str(row.get("processing_engine", ""))
+            uses_limiter = is_limiter_processing_engine(row.get("processing_engine", ""))
             if (
                 str(row.get("peak_control_severity", "")) == PEAK_CONTROL_SEVERITY_HEAVY
                 and peak_control > 0.01
