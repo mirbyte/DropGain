@@ -46,6 +46,7 @@ from optimizer import (
     lufs_distribution_curve,
     peak_control_stats,
     recommend_settings,
+    suggest_limiter_budget_db,
 )
 
 if TYPE_CHECKING:
@@ -72,6 +73,7 @@ class LibraryTuningPage(ctk.CTkFrame):
         self._profile: LibraryProfile | None = None
         self._recommendation: RecommendedSettings | None = None
         self._preview_rows: list[dict[str, object]] = []
+        self._preview_suggested_budget: float | None = None
         self._preview_after_id: str | None = None
         self._chart_after_id: str | None = None
         self._canvas_photos: dict[tk.Canvas, ImageTk.PhotoImage] = {}
@@ -150,7 +152,7 @@ class LibraryTuningPage(ctk.CTkFrame):
         app.btn_lt_apply.pack(side="left", padx=(0, 8))
         app.btn_lt_apply_budget = app._button(
             actions,
-            text="Apply Budget",
+            text="Apply Suggested Limiter Budget",
             command=self._apply_preview_budget,
             state="disabled",
         )
@@ -315,6 +317,14 @@ class LibraryTuningPage(ctk.CTkFrame):
             weight="bold",
         )
         self.lbl_preview_budget.pack(side="left")
+        self.lbl_preview_suggested_budget = app._label(
+            self._limiter_preview_row,
+            text="",
+            color=FG_MUTED,
+            bg=BG_PANEL,
+            size=TYPE_CAPTION,
+        )
+        self.lbl_preview_suggested_budget.pack(side="left", padx=(8, 0))
 
         self.var_preview_diagnostics = tk.StringVar(value="")
         app._label(
@@ -452,8 +462,11 @@ class LibraryTuningPage(ctk.CTkFrame):
         app._refresh_settings_summary()
 
     def _apply_preview_budget(self) -> None:
+        if self._preview_suggested_budget is None:
+            return
         app = self._app
-        app.var_max_reduction.set(round(float(self.var_preview_budget.get()), 1))
+        app.var_max_reduction.set(round(self._preview_suggested_budget, 1))
+        app._refresh_settings_summary()
         self._update_apply_budget_state()
 
     def _is_limiter_assisted(self) -> bool:
@@ -471,16 +484,20 @@ class LibraryTuningPage(ctk.CTkFrame):
 
     def _update_apply_budget_state(self) -> None:
         app = self._app
-        if not self._app._analyzed_rows or not self._is_limiter_assisted():
+        if (
+            not self._app._analyzed_rows
+            or not self._is_limiter_assisted()
+            or self._preview_suggested_budget is None
+        ):
             app._apply_action_button_state(app.btn_lt_apply_budget, "disabled")
             return
         try:
-            preview_budget = float(self.var_preview_budget.get())
+            suggested_budget = float(self._preview_suggested_budget)
             current_budget = float(app.var_max_reduction.get())
         except (tk.TclError, TypeError, ValueError):
             app._apply_action_button_state(app.btn_lt_apply_budget, "disabled")
             return
-        if abs(preview_budget - current_budget) < 0.05:
+        if abs(suggested_budget - current_budget) < 0.05:
             app._apply_action_button_state(app.btn_lt_apply_budget, "disabled")
         else:
             app._apply_action_button_state(app.btn_lt_apply_budget, "normal")
@@ -488,6 +505,10 @@ class LibraryTuningPage(ctk.CTkFrame):
     @staticmethod
     def _format_preview_budget_label(budget_db: float) -> str:
         return f"{budget_db:.1f} dB"
+
+    @staticmethod
+    def _format_suggested_budget_label(budget_db: float) -> str:
+        return f"Suggested: {budget_db:.1f} dB"
 
     @staticmethod
     def _format_preview_target_label(center: float) -> str:
@@ -504,6 +525,8 @@ class LibraryTuningPage(ctk.CTkFrame):
         if not rows:
             self.var_preview_counts.set("")
             self.var_preview_diagnostics.set("")
+            self._preview_suggested_budget = None
+            self.lbl_preview_suggested_budget.configure(text="")
             self._update_apply_budget_state()
             return
 
@@ -518,6 +541,20 @@ class LibraryTuningPage(ctk.CTkFrame):
 
         preview_budget = max(0.0, float(self.var_preview_budget.get()))
         self.lbl_preview_budget.configure(text=self._format_preview_budget_label(preview_budget))
+
+        if self._is_limiter_assisted():
+            self._preview_suggested_budget = suggest_limiter_budget_db(
+                rows,  # type: ignore[arg-type]
+                settings,
+                target_low_lufs=target_low,
+                target_high_lufs=target_high,
+            )
+            self.lbl_preview_suggested_budget.configure(
+                text=self._format_suggested_budget_label(self._preview_suggested_budget)
+            )
+        else:
+            self._preview_suggested_budget = None
+            self.lbl_preview_suggested_budget.configure(text="")
 
         preview_settings = DropGainSettings(
             folder=settings.folder,
@@ -589,12 +626,14 @@ class LibraryTuningPage(ctk.CTkFrame):
             self._profile = None
             self._recommendation = None
             self._preview_rows = []
+            self._preview_suggested_budget = None
             for var in self._metric_vars.values():
                 var.set("—")
             self.var_recommendation.set("Analyze a library to see recommendations.")
             self.var_recommendation_diff.set("")
             self.var_preview_counts.set("")
             self.var_preview_diagnostics.set("")
+            self.lbl_preview_suggested_budget.configure(text="")
             self._app._apply_action_button_state(self._app.btn_lt_apply, "disabled")
             self._app._apply_action_button_state(self._app.btn_lt_apply_budget, "disabled")
             self._update_limiter_preview_visibility()

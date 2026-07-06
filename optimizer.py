@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import copy
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from analysis import (
+    DEFAULT_MAX_REDUCTION_DB,
     PEAK_CONTROL_SEVERITY_HEAVY,
     TrackRow,
     collect_library_row_stats,
@@ -27,6 +29,9 @@ HEAVY_LIMITER_MAX_ABS = 2
 REFINE_STEP_DB = 0.5
 TRUSTWORTHY_SAMPLE_MIN = 20
 TRUSTWORTHY_SAMPLE_MED = 50
+SUGGEST_LIMITER_BUDGET_UNCONSTRAINED_DB = 20.0
+SUGGEST_LIMITER_BUDGET_MARGIN_DB = 0.5
+SUGGEST_LIMITER_BUDGET_MAX_DB = 20.0
 
 
 def _percentile(values: list[float], pct: float) -> float | None:
@@ -267,6 +272,8 @@ def _settings_with_targets(
     current: DropGainSettings,
     target_low_lufs: float,
     target_high_lufs: float,
+    *,
+    max_reduction_db: float | None = None,
 ) -> DropGainSettings:
     return DropGainSettings(
         folder=current.folder,
@@ -275,7 +282,7 @@ def _settings_with_targets(
         target_high_lufs=target_high_lufs,
         window_seconds=current.window_seconds,
         hop_seconds=current.hop_seconds,
-        max_reduction_db=current.max_reduction_db,
+        max_reduction_db=current.max_reduction_db if max_reduction_db is None else max_reduction_db,
         bass_max_reduction_db=current.bass_max_reduction_db,
         peak_ceiling_dbfs=current.peak_ceiling_dbfs,
         normalization_mode=current.normalization_mode,
@@ -320,6 +327,45 @@ def _refine_target_band_for_impact(
         center -= REFINE_STEP_DB
 
     return best_low, best_high
+
+
+def suggest_limiter_budget_db(
+    rows: list[TrackRow],
+    current: DropGainSettings,
+    *,
+    target_low_lufs: float,
+    target_high_lufs: float,
+) -> float:
+    """Suggest max limiter reduction (dB) to cover p90 peak control at the target band."""
+    if not rows:
+        return DEFAULT_MAX_REDUCTION_DB
+
+    preview_settings = _settings_with_targets(
+        current,
+        target_low_lufs,
+        target_high_lufs,
+        max_reduction_db=SUGGEST_LIMITER_BUDGET_UNCONSTRAINED_DB,
+    )
+    preview_rows: list[TrackRow] = []
+    for source in rows:
+        row = copy.deepcopy(source)
+        recompute_row_decision(
+            preview_settings,
+            row,
+            apply_gain_threshold=current.apply_render_gain_threshold,
+        )
+        preview_rows.append(row)
+
+    stats = peak_control_stats(preview_rows)
+    p90 = stats.p90_peak_control_db
+    if p90 is None or stats.limiter_track_count == 0:
+        return DEFAULT_MAX_REDUCTION_DB
+
+    suggested = math.ceil(p90) + SUGGEST_LIMITER_BUDGET_MARGIN_DB
+    return min(
+        SUGGEST_LIMITER_BUDGET_MAX_DB,
+        max(DEFAULT_MAX_REDUCTION_DB, round(suggested, 1)),
+    )
 
 
 def _project_impact(
