@@ -2912,7 +2912,7 @@ def row_needs_true_peak_safety_render(row: TrackRow, gain: float | None = None) 
     action = str(row.get("action", ""))
     return (
         true_peak_headroom < -0.01
-        and (gain_db < -0.01 or action == "lower for true peak")
+        and (gain_db < -0.01 or "lower for true peak" in action)
     )
 
 
@@ -3338,6 +3338,7 @@ def process_track(
     window_seconds: float,
     hop_seconds: float,
     max_reduction: float,
+    bass_max_reduction: float,
     peak_ceiling: float,
     normalization_mode: str,
     analyze_only: bool,
@@ -3379,6 +3380,7 @@ def process_track(
             loud_hop_seconds=hop_seconds,
             max_reduction_db=max_reduction,
             peak_ceiling_dbfs=peak_ceiling,
+            bass_max_reduction_db=bass_max_reduction,
             normalization_mode=normalization_mode,
             source_info=resolved_source_info,
             output_format_mode=output_format_mode,

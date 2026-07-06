@@ -13,9 +13,11 @@ from analysis import (
     MAX_LOUD_SECTION_HOP_SECONDS,
     MAX_ANALYSIS_WORKER_THREADS,
     MAX_LOUD_SECTION_WINDOW_SECONDS,
+    MAX_BASS_MAX_BOOST_REDUCTION_DB,
     MIN_LOUD_SECTION_HOP_SECONDS,
     MIN_ANALYSIS_WORKER_THREADS,
     MIN_LOUD_SECTION_WINDOW_SECONDS,
+    MIN_BASS_MAX_BOOST_REDUCTION_DB,
     LIMITER_ENGINE_CHOICES,
     MP3_MIN_ABS_GAIN_DB,
     NORMALIZATION_MODE_CHOICES,
@@ -662,11 +664,18 @@ class PreferencesPage(ctk.CTkFrame):
 
         self._labeled_number(
             grid, 2, 0, "Max limiter reduction", self.app.var_max_reduction, 0.0, 20.0, 0.1, "dB",
-            columnspan=2,
-            padx=(0, 0),
             tooltip=(
                 "Maximum amount DropGain is allowed to turn down an overly loud track. "
                 "This prevents extreme level changes from changing the intended energy of the master."
+            ),
+        )
+        self._labeled_number(
+            grid, 2, 1, "Max bass-aware trim", self.app.var_bass_max_reduction,
+            MIN_BASS_MAX_BOOST_REDUCTION_DB, MAX_BASS_MAX_BOOST_REDUCTION_DB, 0.1, "dB",
+            padx=(0, 0),
+            tooltip=(
+                "Maximum bass-aware gain trim on bass-heavy tracks. "
+                "Reduces boosts and deepens cuts slightly. Set to 0 to disable."
             ),
         )
 

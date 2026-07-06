@@ -275,6 +275,7 @@ def _settings_with_targets(
         window_seconds=current.window_seconds,
         hop_seconds=current.hop_seconds,
         max_reduction_db=current.max_reduction_db,
+        bass_max_reduction_db=current.bass_max_reduction_db,
         peak_ceiling_dbfs=current.peak_ceiling_dbfs,
         normalization_mode=current.normalization_mode,
         limiter_engine=current.limiter_engine,

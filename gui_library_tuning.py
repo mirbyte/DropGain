@@ -527,6 +527,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             window_seconds=settings.window_seconds,
             hop_seconds=settings.hop_seconds,
             max_reduction_db=preview_budget,
+            bass_max_reduction_db=settings.bass_max_reduction_db,
             peak_ceiling_dbfs=settings.peak_ceiling_dbfs,
             normalization_mode=settings.normalization_mode,
             limiter_engine=settings.limiter_engine,

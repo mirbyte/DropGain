@@ -119,6 +119,7 @@ class DropGainSettings:
     window_seconds: float
     hop_seconds: float
     max_reduction_db: float
+    bass_max_reduction_db: float
     peak_ceiling_dbfs: float
     normalization_mode: str
     analysis_workers: int
@@ -261,6 +262,7 @@ def recompute_row_decision(
         max_reduction_db=settings.max_reduction_db,
         peak_ceiling_dbfs=settings.peak_ceiling_dbfs,
         normalization_mode=settings.normalization_mode,
+        bass_max_reduction_db=settings.bass_max_reduction_db,
         allow_risky_true_peak_boost=settings.allow_risky_true_peak_boost,
     )
     apply_track_decision(row, decision, limiter_engine=settings.limiter_engine)
@@ -433,6 +435,7 @@ def run_analysis_job(
                 window_seconds=settings.window_seconds,
                 hop_seconds=settings.hop_seconds,
                 max_reduction=settings.max_reduction_db,
+                bass_max_reduction=settings.bass_max_reduction_db,
                 peak_ceiling=settings.peak_ceiling_dbfs,
                 normalization_mode=settings.normalization_mode,
                 analyze_only=True,

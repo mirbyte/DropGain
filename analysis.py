@@ -118,6 +118,10 @@ DEFAULT_TARGET_HIGH_LUFS = -7.5
 
 DEFAULT_MAX_REDUCTION_DB = 3.0
 
+DEFAULT_BASS_MAX_BOOST_REDUCTION_DB = 0.60
+MIN_BASS_MAX_BOOST_REDUCTION_DB = 0.0
+MAX_BASS_MAX_BOOST_REDUCTION_DB = 3.0
+
 NORMALIZATION_MODE_LIMITER_ASSISTED = "Limiter-assisted"
 NORMALIZATION_MODE_CLEAN_GAIN = "Clean gain"
 NORMALIZATION_MODE_CHOICES = (
@@ -203,21 +207,18 @@ POST_VERIFY_PROCESSED_AUDIO = True
 POST_VERIFY_LUFS_TOLERANCE = 0.40
 POST_VERIFY_PEAK_TOLERANCE_DB = 0.20
 
-BASS_AWARE_GAIN_REDUCTION = True
 BASS_ANALYSIS_LOW_HZ = 45.0
 BASS_ANALYSIS_HIGH_HZ = 150.0
 BASS_REFERENCE_LOW_HZ = 150.0
 BASS_REFERENCE_HIGH_HZ = 1000.0
 BASS_PENALTY_START_DB = 3.0
 BASS_PENALTY_FULL_DB = 12.0
-BASS_MAX_BOOST_REDUCTION_DB = 0.60
 BASS_ANALYSIS_FFT_SIZE = 16_384
 
 SUB_ANALYSIS_LOW_HZ = 20.0
 SUB_ANALYSIS_HIGH_HZ = 45.0
 SUB_PENALTY_START_DB = 6.0
 SUB_PENALTY_FULL_DB = 15.0
-SUB_MAX_BOOST_REDUCTION_DB = 0.60
 
 TrackRowValue: TypeAlias = str | int | float
 TrackRowNumber: TypeAlias = float | str
@@ -1456,33 +1457,43 @@ def measure_sub_strength_db(
     )
 
 
-def bass_aware_boost_reduction_db(
+def bass_aware_gain_trim_db(
     bass_strength_db: float | None,
     sub_strength_db: float | None,
     suggested_gain_db: float,
+    bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
 ) -> float:
-    """Return a mild low-end penalty that only reduces positive boosts."""
-    if not BASS_AWARE_GAIN_REDUCTION:
+    """Return a mild low-end trim magnitude applied against the suggested gain direction."""
+    max_reduction = max(0.0, float(bass_max_reduction_db))
+    if max_reduction <= 0.01:
         return 0.0
 
-    gain = max(0.0, float(suggested_gain_db))
-    if gain <= 0.01:
+    gain = float(suggested_gain_db)
+    if abs(gain) <= 0.01:
         return 0.0
 
     bass_reduction = boost_reduction_for_strength(
         bass_strength_db,
         BASS_PENALTY_START_DB,
         BASS_PENALTY_FULL_DB,
-        BASS_MAX_BOOST_REDUCTION_DB,
+        max_reduction,
     )
     sub_reduction = boost_reduction_for_strength(
         sub_strength_db,
         SUB_PENALTY_START_DB,
         SUB_PENALTY_FULL_DB,
-        SUB_MAX_BOOST_REDUCTION_DB,
+        max_reduction,
     )
     reduction = max(bass_reduction, sub_reduction)
-    return min(gain, reduction)
+    return min(abs(gain), reduction)
+
+
+def mark_bass_aware_action(action: str) -> str:
+    """Append a bass-aware suffix when trim was applied."""
+    label = str(action).strip()
+    if not label or "bass-aware" in label:
+        return label
+    return f"{label} bass-aware"
 
 
 def boost_reduction_for_strength(
@@ -1596,7 +1607,7 @@ def apply_whole_track_limiter_budget(
 
     if action == "leave" and suggested_gain < -0.01:
         action = "lower for true peak"
-    elif action in {"raise", "raise bass-aware"} and suggested_gain <= 0.01:
+    elif action.startswith("raise") and suggested_gain <= 0.01:
         action = "too quiet but peak-limited"
 
     notes.append(
@@ -1660,6 +1671,7 @@ def decide_from_measurements(
     max_reduction_db: float,
     peak_ceiling_dbfs: float,
     normalization_mode: str,
+    bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     allow_risky_true_peak_boost: bool = False,
     true_peak_measurements_present: bool = True,
 ) -> TrackDecision:
@@ -1698,17 +1710,29 @@ def decide_from_measurements(
     if gain_notes:
         decision_notes = append_note(decision_notes, gain_notes)
 
-    bass_adjustment = bass_aware_boost_reduction_db(bass_strength, sub_strength, suggested_gain)
+    bass_adjustment = bass_aware_gain_trim_db(
+        bass_strength,
+        sub_strength,
+        suggested_gain,
+        bass_max_reduction_db=bass_max_reduction_db,
+    )
     if bass_adjustment > 0.01:
-        suggested_gain = max(0.0, suggested_gain - bass_adjustment)
+        if suggested_gain > 0.01:
+            suggested_gain -= bass_adjustment
+            action = mark_bass_aware_action(action)
+            decision_notes = append_note(
+                decision_notes,
+                f"bass-aware boost reduced by {bass_adjustment:.2f} dB",
+            )
+        elif suggested_gain < -0.01:
+            suggested_gain -= bass_adjustment
+            action = mark_bass_aware_action(action)
+            decision_notes = append_note(
+                decision_notes,
+                f"bass-aware cut increased by {bass_adjustment:.2f} dB",
+            )
         if abs(suggested_gain) < 0.01:
             suggested_gain = 0.0
-        if action == "raise":
-            action = "raise bass-aware"
-        decision_notes = append_note(
-            decision_notes,
-            f"bass-aware boost reduced by {bass_adjustment:.2f} dB",
-        )
 
     mp3_preserve_accepts_tp_quirks = (
         source_ext == ".mp3"
@@ -1748,7 +1772,7 @@ def decide_from_measurements(
             f"true peak unreliable; boost capped at 0 dB (was {capped_gain:.2f} dB)",
         )
         suggested_gain = 0.0
-        if action in {"raise", "raise bass-aware"}:
+        if action.startswith("raise"):
             action = "too quiet but peak-limited"
 
     projected_loudest = loudest_lufs + suggested_gain
@@ -1829,6 +1853,7 @@ def decision_from_row(
     max_reduction_db: float,
     peak_ceiling_dbfs: float,
     normalization_mode: str,
+    bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     allow_risky_true_peak_boost: bool = False,
 ) -> TrackDecision:
     """Recompute decision fields for an existing analyzed row."""
@@ -1860,6 +1885,7 @@ def decision_from_row(
         max_reduction_db=max_reduction_db,
         peak_ceiling_dbfs=peak_ceiling_dbfs,
         normalization_mode=normalization_mode,
+        bass_max_reduction_db=bass_max_reduction_db,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=not true_peak_unreliable,
     )
@@ -1873,6 +1899,7 @@ def analyze_file(
     loud_hop_seconds: float,
     max_reduction_db: float,
     peak_ceiling_dbfs: float,
+    bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     normalization_mode: str = DEFAULT_NORMALIZATION_MODE,
     output_root: str | None = None,
     source_root: str | None = None,
@@ -1992,6 +2019,7 @@ def analyze_file(
         max_reduction_db=max_reduction_db,
         peak_ceiling_dbfs=peak_ceiling_dbfs,
         normalization_mode=normalization_mode,
+        bass_max_reduction_db=bass_max_reduction_db,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=bool(true_peak_measurements),
     )

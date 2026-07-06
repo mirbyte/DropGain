@@ -50,6 +50,9 @@ from analysis import (
     DEFAULT_LOUD_SECTION_HOP_SECONDS,
     DEFAULT_LOUD_SECTION_WINDOW_SECONDS,
     DEFAULT_MAX_REDUCTION_DB,
+    DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
+    MIN_BASS_MAX_BOOST_REDUCTION_DB,
+    MAX_BASS_MAX_BOOST_REDUCTION_DB,
     DEFAULT_NORMALIZATION_MODE,
     DEFAULT_APPLY_RENDER_GAIN_THRESHOLD,
     DEFAULT_OUTPUT_FORMAT_MODE,
@@ -439,6 +442,7 @@ class App(WaveformMixin, ctk.CTk):
                 "hop_seconds": float(self.var_hop.get()),
                 "workers": int(float(self.var_workers.get())),
                 "max_reduction": float(self.var_max_reduction.get()),
+                "bass_max_reduction": float(self.var_bass_max_reduction.get()),
                 "peak_ceiling": float(self.var_peak_ceiling.get()),
                 "normalization_mode": normalize_normalization_mode(self.var_normalization_mode.get()),
                 "limiter_engine": normalize_limiter_engine(self.var_limiter_engine.get()),
@@ -858,6 +862,9 @@ class App(WaveformMixin, ctk.CTk):
         self.var_target_low = tk.DoubleVar(value=self._setting_float(settings, "target_low", DEFAULT_TARGET_LOW_LUFS))
         self.var_target_high = tk.DoubleVar(value=self._setting_float(settings, "target_high", DEFAULT_TARGET_HIGH_LUFS))
         self.var_max_reduction = tk.DoubleVar(value=self._setting_float(settings, "max_reduction", DEFAULT_MAX_REDUCTION_DB))
+        self.var_bass_max_reduction = tk.DoubleVar(
+            value=self._setting_float(settings, "bass_max_reduction", DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
+        )
         self.var_peak_ceiling = tk.DoubleVar(value=self._setting_float(settings, "peak_ceiling", DEFAULT_BOOST_PEAK_CEILING_DBFS))
         self.var_mp3_threshold = tk.DoubleVar(value=self._setting_float(settings, "mp3_threshold", MP3_MIN_ABS_GAIN_DB))
         self.var_lossless_threshold = tk.DoubleVar(value=self._setting_float(settings, "lossless_threshold", LOSSLESS_MIN_ABS_GAIN_DB))
@@ -1176,6 +1183,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_target_low,
             self.var_target_high,
             self.var_max_reduction,
+            self.var_bass_max_reduction,
             self.var_peak_ceiling,
             self.var_mp3_threshold,
             self.var_lossless_threshold,
@@ -1811,6 +1819,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_target_low.set(DEFAULT_TARGET_LOW_LUFS)
             self.var_target_high.set(DEFAULT_TARGET_HIGH_LUFS)
             self.var_max_reduction.set(DEFAULT_MAX_REDUCTION_DB)
+            self.var_bass_max_reduction.set(DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
             self.var_peak_ceiling.set(DEFAULT_BOOST_PEAK_CEILING_DBFS)
             self.var_normalization_mode.set(DEFAULT_NORMALIZATION_MODE)
             self.var_limiter_engine.set(DEFAULT_LIMITER_ENGINE)
@@ -2017,6 +2026,10 @@ class App(WaveformMixin, ctk.CTk):
             hop_seconds = max(1.0, float(self.var_hop.get()))
             workers = max(MIN_ANALYSIS_WORKER_THREADS, min(MAX_ANALYSIS_WORKER_THREADS, int(float(self.var_workers.get()))))
             max_reduction = max(0.0, float(self.var_max_reduction.get()))
+            bass_max_reduction = max(
+                MIN_BASS_MAX_BOOST_REDUCTION_DB,
+                min(MAX_BASS_MAX_BOOST_REDUCTION_DB, float(self.var_bass_max_reduction.get())),
+            )
             peak_ceiling = float(self.var_peak_ceiling.get())
             normalization_mode = normalize_normalization_mode(self.var_normalization_mode.get())
             limiter_engine = normalize_limiter_engine(self.var_limiter_engine.get())
@@ -2128,6 +2141,7 @@ class App(WaveformMixin, ctk.CTk):
                 window_seconds,
                 hop_seconds,
                 max_reduction,
+                bass_max_reduction,
                 peak_ceiling,
                 normalization_mode,
                 limiter_engine,
@@ -2210,6 +2224,7 @@ class App(WaveformMixin, ctk.CTk):
         window_seconds: float,
         hop_seconds: float,
         max_reduction: float,
+        bass_max_reduction: float,
         peak_ceiling: float,
         normalization_mode: str,
         limiter_engine: str,
@@ -2235,6 +2250,7 @@ class App(WaveformMixin, ctk.CTk):
                 window_seconds=window_seconds,
                 hop_seconds=hop_seconds,
                 max_reduction_db=max_reduction,
+                bass_max_reduction_db=bass_max_reduction,
                 peak_ceiling_dbfs=peak_ceiling,
                 normalization_mode=normalization_mode,
                 limiter_engine=limiter_engine,
@@ -2556,6 +2572,10 @@ class App(WaveformMixin, ctk.CTk):
                 window_seconds=max(1.0, float(self.var_window.get())),
                 hop_seconds=max(1.0, float(self.var_hop.get())),
                 max_reduction_db=max(0.0, float(self.var_max_reduction.get())),
+                bass_max_reduction_db=max(
+                    MIN_BASS_MAX_BOOST_REDUCTION_DB,
+                    min(MAX_BASS_MAX_BOOST_REDUCTION_DB, float(self.var_bass_max_reduction.get())),
+                ),
                 peak_ceiling_dbfs=float(self.var_peak_ceiling.get()),
                 normalization_mode=normalize_normalization_mode(self.var_normalization_mode.get()),
                 limiter_engine=normalize_limiter_engine(self.var_limiter_engine.get()),
