@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import traceback
+import webbrowser
 from typing import Any, Callable
 import tkinter as tk
 import tkinter.font as tkfont
@@ -1088,6 +1089,16 @@ class App(WaveformMixin, ctk.CTk):
         self.btn_nav_preferences.grid(row=0, column=2)
         self.btn_settings = self.btn_nav_preferences
 
+        self.btn_report_issue = ctk.CTkButton(
+            nav,
+            text="Issue",
+            width=55,
+            height=28,
+            command=self._open_report_issue,
+            **self._tab_button_style(active=False),
+        )
+        self.btn_report_issue.grid(row=0, column=3, padx=(SPACE_2, 0))
+
         ctk.CTkFrame(header, fg_color=BORDER_COLOR, height=1, corner_radius=0).grid(row=1, column=0, sticky="ew")
 
         self.pages_container = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0)
@@ -1226,6 +1237,9 @@ class App(WaveformMixin, ctk.CTk):
             before_reveal=lambda: self._prepare_main_page_for_reveal(name, prev_page),
             settle_ms=settle_ms,
         )
+
+    def _open_report_issue(self) -> None:
+        webbrowser.open("https://github.com/mirbyte/DropGain/issues")
 
     def _show_output_tab(self, name: str) -> None:
         """Show the compact output panel tab without the extra CTkTabview top padding."""
