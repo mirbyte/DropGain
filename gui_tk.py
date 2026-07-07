@@ -2044,8 +2044,8 @@ class App(WaveformMixin, ctk.CTk):
             messagebox.showerror("Invalid settings", f"Check the numeric settings.\n\n{exc}")
             return
 
-        if target_low >= target_high:
-            messagebox.showerror("Invalid target", "Target low must be lower than target high.\n\nFor example: low -8.0, high -7.0.")
+        if target_low > target_high:
+            messagebox.showerror("Invalid target", "Target low must not be higher than target high.\n\nFor example: low -8.0, high -7.0.")
             return
 
         if hop_seconds > window_seconds:
