@@ -188,7 +188,7 @@ RESULTS_TABLE_COLUMNS = (
     ),
     (
         "limiting",
-        "Limit",
+        "Peak control",
         "e",
         "1.47 dB",
         "Peak reduction FabFilter Pro-L would apply to stay under your ceiling. "

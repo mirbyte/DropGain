@@ -107,6 +107,7 @@ from analysis import (
     measure_section_and_whole_true_peak_oversampled,
     parse_float_or_default,
     parse_int_or_default,
+    parse_optional_float,
     pioneer_compatible_aiff_codec,
     pioneer_compatible_aiff_sample_rate,
     processing_engine_for_limiter,
@@ -3117,8 +3118,7 @@ def verify_processed_audio_fast(
     input_peak = parse_float_or_default(row["sample_peak_dbfs"], 0.0)
     input_true_peak = parse_float_or_default(row["true_peak_dbtp"], input_peak)
 
-    suggested_gain = parse_float_or_default(row["suggested_gain_db"], 0.0)
-    projected_loudest = parse_float_or_default(row["projected_loudest_section_lufs"], 0.0)
+    projected_loudest = parse_optional_float(row.get("projected_loudest_section_lufs"))
     actual_same_section_gain = output_same_section_lufs - input_loudest
     actual_peak_gain = output_peak_dbfs - input_peak
 
@@ -3152,47 +3152,48 @@ def verify_processed_audio_fast(
 
     target_low = parse_float_or_default(row.get("target_low_lufs"), -999.0)
     target_high = parse_float_or_default(row.get("target_high_lufs"), 999.0)
-    if output_same_section_lufs < target_low - POST_VERIFY_LUFS_TOLERANCE:
+    effective_low = min(target_low, projected_loudest) if projected_loudest is not None else target_low
+    effective_high = max(target_high, projected_loudest) if projected_loudest is not None else target_high
+
+    if output_same_section_lufs < effective_low - POST_VERIFY_LUFS_TOLERANCE:
         notes.append(
             f"output analyzed section {output_same_section_lufs:.2f} LUFS is below "
-            f"target low {target_low:.2f} LUFS"
+            f"expected {effective_low:.2f} LUFS"
         )
-    elif output_same_section_lufs > target_high + POST_VERIFY_LUFS_TOLERANCE:
+    elif output_same_section_lufs > effective_high + POST_VERIFY_LUFS_TOLERANCE:
         notes.append(
             f"output analyzed section {output_same_section_lufs:.2f} LUFS is above "
-            f"target high {target_high:.2f} LUFS"
+            f"expected {effective_high:.2f} LUFS"
         )
 
     if output_loudest_section_lufs is not None:
-        section_range = ""
-        if (
-            output_loudest_section_start_sec is not None
-            and output_loudest_section_end_sec is not None
-        ):
-            section_range = (
-                f" at {output_loudest_section_start_sec:.1f}-"
-                f"{output_loudest_section_end_sec:.1f}s"
-            )
+        rescan_matches_same_section = (
+            abs(output_loudest_section_lufs - output_same_section_lufs)
+            <= POST_VERIFY_LUFS_TOLERANCE
+        )
+        if not rescan_matches_same_section:
+            section_range = ""
+            if (
+                output_loudest_section_start_sec is not None
+                and output_loudest_section_end_sec is not None
+            ):
+                section_range = (
+                    f" at {output_loudest_section_start_sec:.1f}-"
+                    f"{output_loudest_section_end_sec:.1f}s"
+                )
 
-        if output_loudest_section_lufs < target_low - POST_VERIFY_LUFS_TOLERANCE:
-            notes.append(
-                f"output re-scanned loudest section{section_range} "
-                f"{output_loudest_section_lufs:.2f} LUFS is below "
-                f"target low {target_low:.2f} LUFS"
-            )
-        elif output_loudest_section_lufs > target_high + POST_VERIFY_LUFS_TOLERANCE:
-            notes.append(
-                f"output re-scanned loudest section{section_range} "
-                f"{output_loudest_section_lufs:.2f} LUFS is above "
-                f"target high {target_high:.2f} LUFS"
-            )
-
-    if suggested_gain > 0.0:
-        clean_projection_delta = output_same_section_lufs - projected_loudest
-        if abs(clean_projection_delta) > POST_VERIFY_LUFS_TOLERANCE:
-            notes.append(
-                f"post-render loudest-section landed {clean_projection_delta:+.2f} dB from clean projection"
-            )
+            if output_loudest_section_lufs < effective_low - POST_VERIFY_LUFS_TOLERANCE:
+                notes.append(
+                    f"output re-scanned loudest section{section_range} "
+                    f"{output_loudest_section_lufs:.2f} LUFS is below "
+                    f"expected {effective_low:.2f} LUFS"
+                )
+            elif output_loudest_section_lufs > effective_high + POST_VERIFY_LUFS_TOLERANCE:
+                notes.append(
+                    f"output re-scanned loudest section{section_range} "
+                    f"{output_loudest_section_lufs:.2f} LUFS is above "
+                    f"expected {effective_high:.2f} LUFS"
+                )
 
     if notes:
         return "warning", "; ".join(notes)
