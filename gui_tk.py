@@ -2828,6 +2828,35 @@ class App(WaveformMixin, ctk.CTk):
             self._save_settings_after_id = None
         self._save_settings()
 
+    def _has_unrendered_analyzed_rows(self) -> bool:
+        return any(
+            str(row.get("processing_status", "")).startswith("analyzed_")
+            for row in self._analyzed_rows
+        )
+
+    def _quit_confirmation_message(self) -> str | None:
+        busy = self._is_run_busy()
+        unrendered = self._has_unrendered_analyzed_rows()
+        if not busy and not unrendered:
+            return None
+        if busy and unrendered:
+            return (
+                "A job is still running and unrendered analysis results are in memory.\n\n"
+                "Closing now will cancel the running job and discard the analyzed results. "
+                "Are you sure you want to quit?"
+            )
+        if busy:
+            return (
+                "A job is still running.\n\n"
+                "Closing now will cancel it and discard any results collected so far. "
+                "Are you sure you want to quit?"
+            )
+        return (
+            "You have unrendered analysis results that will be lost when you close.\n\n"
+            "Render the analyzed tracks first if you want to keep them. "
+            "Are you sure you want to quit?"
+        )
+
     def _finish_close(self) -> None:
         self._flush_pending_settings_save()
         self._restore_exception_handlers()
@@ -2837,6 +2866,13 @@ class App(WaveformMixin, ctk.CTk):
         self.destroy()
 
     def _close_app(self) -> None:
+        if self._close_requested:
+            return
+
+        message = self._quit_confirmation_message()
+        if message is not None and not messagebox.askyesno("Quit DropGain?", message, icon="warning"):
+            return
+
         if self._worker_thread is not None and self._worker_thread.is_alive():
             self._close_requested = True
             self._cancel_flag.set()
