@@ -8,6 +8,7 @@ is delegated to jobs.py.
 
 from __future__ import annotations
 
+import faulthandler
 import json
 import logging
 import logging.handlers
@@ -18,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from typing import Any, Callable
 import tkinter as tk
 import tkinter.font as tkfont
@@ -127,7 +129,24 @@ SETTINGS_FILE_NAME = "dropgain_settings.json"
 SETTINGS_SCHEMA_VERSION = 1
 
 LOG_FILE_NAME = "dropgain.log"
+CRASH_LOG_FILE_NAME = "dropgain_crash.log"
 START_MAXIMIZED = True
+
+
+def enable_crash_diagnostics() -> None:
+    """Write hard-crash tracebacks to a log file next to the app."""
+    crash_log = script_folder() / CRASH_LOG_FILE_NAME
+    try:
+        handle = open(crash_log, "a", encoding="utf-8")
+    except OSError:
+        return
+    try:
+        faulthandler.enable(file=handle, all_threads=True)
+    except Exception:
+        try:
+            handle.close()
+        except OSError:
+            pass
 
 RUN_COUNT_KEYS = (
     "processed",
@@ -186,6 +205,7 @@ class App(WaveformMixin, ctk.CTk):
         self._cancel_flag = threading.Event()
         self._worker_thread: threading.Thread | None = None
         self._close_requested = False
+        self._previous_thread_excepthook: Callable[[threading.ExceptHookArgs], Any] | None = None
         self._panel_fade = ContentFadeTransition(self)
         self._logger = logging.getLogger("dropgain")
         self._log_listener: logging.handlers.QueueListener | None = None
@@ -201,6 +221,7 @@ class App(WaveformMixin, ctk.CTk):
 
         self._init_settings_variables()
         self._configure_logging()
+        self._install_exception_handlers()
         self._configure_treeview_style()
         self._build_ui()
         self._building_ui = False
@@ -493,6 +514,72 @@ class App(WaveformMixin, ctk.CTk):
             self._log_listener.stop()
             self._log_listener = None
         self._logger.handlers.clear()
+
+    def _install_exception_handlers(self) -> None:
+        previous = threading.excepthook
+        self._previous_thread_excepthook = previous
+
+        def thread_excepthook(args: threading.ExceptHookArgs) -> None:
+            if args.exc_value is None:
+                previous(args)
+                return
+            thread_name = args.thread.name if args.thread is not None else "unknown"
+            detail = "".join(
+                traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback)
+            )
+            try:
+                self._logger.error("Uncaught exception in thread %s:\n%s", thread_name, detail)
+                self._queue.put(("thread_error", (thread_name, detail)))
+            except Exception:
+                previous(args)
+
+        threading.excepthook = thread_excepthook
+
+    def _restore_exception_handlers(self) -> None:
+        if self._previous_thread_excepthook is not None:
+            threading.excepthook = self._previous_thread_excepthook
+            self._previous_thread_excepthook = None
+
+    def report_callback_exception(
+        self,
+        exc: type[BaseException],
+        val: BaseException,
+        tb: Any,
+    ) -> None:
+        detail = "".join(traceback.format_exception(exc, val, tb))
+        self._logger.error("Unhandled Tk callback error:\n%s", detail)
+        try:
+            self._queue.put(("callback_error", detail))
+        except Exception:
+            self._show_unexpected_error_dialog("Unexpected error")
+
+    def _log_file_path(self) -> str:
+        return str(script_folder() / LOG_FILE_NAME)
+
+    def _show_unexpected_error_dialog(self, title: str, *, thread_name: str | None = None) -> None:
+        if self._close_requested:
+            return
+        log_path = self._log_file_path()
+        if thread_name:
+            body = (
+                f"Thread {thread_name} failed unexpectedly.\n\n"
+                f"Details are in the log:\n{log_path}"
+            )
+        else:
+            body = (
+                "An unexpected error occurred.\n\n"
+                f"Details are in the log:\n{log_path}"
+            )
+        messagebox.showerror(title, body)
+
+    def _show_fatal_job_error_dialog(self) -> None:
+        if self._close_requested:
+            return
+        messagebox.showerror(
+            "Processing error",
+            "The current operation failed unexpectedly.\n\n"
+            f"Details are in the log:\n{self._log_file_path()}",
+        )
 
     def _install_window_icon(self) -> None:
         try:
@@ -2307,92 +2394,112 @@ class App(WaveformMixin, ctk.CTk):
     # ---------------------------------------------------------------------
 
     def _poll_queue(self) -> None:
+        stop_polling = False
         try:
-            kind, data = self._queue.get_nowait()
-        except queue.Empty:
-            self.after(100, self._poll_queue)
-            return
+            try:
+                kind, data = self._queue.get_nowait()
+            except queue.Empty:
+                return
 
-        try:
-            with benchmark_timer("GUI progress overhead", self._logger):
-                while True:
-                    if kind == "log":
-                        self._log(str(data))
-                    elif kind == "log_error":
-                        self._log(str(data), "error")
-                    elif kind == "log_message":
-                        text, tag = data  # type: ignore[misc]
-                        self._log(str(text), tag)
-                    elif kind == "status":
-                        self.var_status.set(str(data))
-                    elif kind == "phase":
-                        self._set_active_phase(str(data))
-                    elif kind == "batch_phase":
-                        self._on_batch_phase(data)
-                    elif kind == "progress_max":
-                        self._set_progress_max(max(int(data), 1))
-                    elif kind == "summary_counts":
-                        self._run_counts = dict(data)  # type: ignore[arg-type]
-                        self.var_run_summary.set(self._format_run_counts(self._run_counts))
-                        self._update_summary_cards()
-                    elif kind == "tick":
-                        self._on_progress_tick(data)
-                    elif kind == "analysis_rows":
-                        rows, signature, work_items = data  # type: ignore[misc]
-                        self._analyzed_rows = list(rows)
-                        self._analyzed_work_items = dict(work_items)
-                        self._analysis_signature = dict(signature)
-                        self._active_run_signature = None
-                        self._populate_results_table(self._analyzed_rows)
-                        if self.library_tuning_page is not None:
-                            self.library_tuning_page.refresh_from_app()
-                        self._set_idle_state()
-                    elif kind == "batch_rows":
-                        rows, signature, work_items = data  # type: ignore[misc]
-                        self._analyzed_rows = list(rows)
-                        self._analyzed_work_items = dict(work_items)
-                        self._analysis_signature = dict(signature)
-                        self._active_run_signature = None
-                        self._populate_results_table(self._analyzed_rows)
-                        if self.library_tuning_page is not None:
-                            self.library_tuning_page.refresh_from_app()
-                        self._set_idle_state()
-                    elif kind == "processing_rows":
-                        self._analyzed_rows = list(data)  # type: ignore[arg-type]
-                        self._populate_results_table(self._analyzed_rows)
-                        self._set_idle_state()
-                    elif kind == "finished":
-                        self._set_idle_state()
-                        self.var_status.set("Done.")
-                        if self._close_requested:
-                            self._finish_close()
-                            return
-                    elif kind == "cancelled":
-                        self._set_idle_state()
-                        self.var_status.set("Cancelled.")
-                        if self._close_requested:
-                            self._finish_close()
-                            return
-                    elif kind == "fatal":
-                        self._set_idle_state()
-                        self.var_status.set("Error. See output above.")
-                        if self._close_requested:
-                            self._finish_close()
-                            return
-                    elif kind == "waveform_preview":
-                        request_id, preview = data  # type: ignore[misc]
-                        if int(request_id) == self._waveform_request_id:
-                            self._show_waveform_preview(dict(preview))
-                    elif kind == "waveform_error":
-                        request_id, message, filename = data  # type: ignore[misc]
-                        if int(request_id) == self._waveform_request_id:
-                            self._show_waveform_error(str(message), str(filename))
+            try:
+                with benchmark_timer("GUI progress overhead", self._logger):
+                    while True:
+                        if kind == "log":
+                            self._log(str(data))
+                        elif kind == "log_error":
+                            self._log(str(data), "error")
+                        elif kind == "log_message":
+                            text, tag = data  # type: ignore[misc]
+                            self._log(str(text), tag)
+                        elif kind == "status":
+                            self.var_status.set(str(data))
+                        elif kind == "phase":
+                            self._set_active_phase(str(data))
+                        elif kind == "batch_phase":
+                            self._on_batch_phase(data)
+                        elif kind == "progress_max":
+                            self._set_progress_max(max(int(data), 1))
+                        elif kind == "summary_counts":
+                            self._run_counts = dict(data)  # type: ignore[arg-type]
+                            self.var_run_summary.set(self._format_run_counts(self._run_counts))
+                            self._update_summary_cards()
+                        elif kind == "tick":
+                            self._on_progress_tick(data)
+                        elif kind == "analysis_rows":
+                            rows, signature, work_items = data  # type: ignore[misc]
+                            self._analyzed_rows = list(rows)
+                            self._analyzed_work_items = dict(work_items)
+                            self._analysis_signature = dict(signature)
+                            self._active_run_signature = None
+                            self._populate_results_table(self._analyzed_rows)
+                            if self.library_tuning_page is not None:
+                                self.library_tuning_page.refresh_from_app()
+                            self._set_idle_state()
+                        elif kind == "batch_rows":
+                            rows, signature, work_items = data  # type: ignore[misc]
+                            self._analyzed_rows = list(rows)
+                            self._analyzed_work_items = dict(work_items)
+                            self._analysis_signature = dict(signature)
+                            self._active_run_signature = None
+                            self._populate_results_table(self._analyzed_rows)
+                            if self.library_tuning_page is not None:
+                                self.library_tuning_page.refresh_from_app()
+                            self._set_idle_state()
+                        elif kind == "processing_rows":
+                            self._analyzed_rows = list(data)  # type: ignore[arg-type]
+                            self._populate_results_table(self._analyzed_rows)
+                            self._set_idle_state()
+                        elif kind == "finished":
+                            self._set_idle_state()
+                            self.var_status.set("Done.")
+                            if self._close_requested:
+                                self._finish_close()
+                                stop_polling = True
+                                return
+                        elif kind == "cancelled":
+                            self._set_idle_state()
+                            self.var_status.set("Cancelled.")
+                            if self._close_requested:
+                                self._finish_close()
+                                stop_polling = True
+                                return
+                        elif kind == "fatal":
+                            self._set_idle_state()
+                            self.var_status.set("Error. See output above.")
+                            self._show_fatal_job_error_dialog()
+                            if self._close_requested:
+                                self._finish_close()
+                                stop_polling = True
+                                return
+                        elif kind == "thread_error":
+                            thread_name, _detail = data  # type: ignore[misc]
+                            self._show_unexpected_error_dialog(
+                                "Background thread error",
+                                thread_name=str(thread_name),
+                            )
+                        elif kind == "callback_error":
+                            self._show_unexpected_error_dialog("Unexpected error")
+                        elif kind == "waveform_preview":
+                            request_id, preview = data  # type: ignore[misc]
+                            if int(request_id) == self._waveform_request_id:
+                                self._show_waveform_preview(dict(preview))
+                        elif kind == "waveform_error":
+                            request_id, message, filename = data  # type: ignore[misc]
+                            if int(request_id) == self._waveform_request_id:
+                                self._show_waveform_error(str(message), str(filename))
 
-                    kind, data = self._queue.get_nowait()
-        except queue.Empty:
-            pass
-
-        self.after(100, self._poll_queue)
+                        kind, data = self._queue.get_nowait()
+            except queue.Empty:
+                pass
+            except Exception:
+                self._logger.exception("GUI queue handler failed")
+        finally:
+            if not stop_polling:
+                try:
+                    if self.winfo_exists():
+                        self.after(100, self._poll_queue)
+                except tk.TclError:
+                    pass
 
     # ---------------------------------------------------------------------
     # Log and table helpers
@@ -2709,6 +2816,7 @@ class App(WaveformMixin, ctk.CTk):
 
     def _finish_close(self) -> None:
         self._flush_pending_settings_save()
+        self._restore_exception_handlers()
         self._shutdown_waveform_worker()
         shutdown_prol2_render_host()
         self._shutdown_logging()

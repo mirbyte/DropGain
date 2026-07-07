@@ -11,7 +11,7 @@ from tkinter import messagebox
 
 def main() -> None:
     try:
-        from gui_tk import App, enable_windows_dpi_awareness
+        from gui_tk import App, enable_crash_diagnostics, enable_windows_dpi_awareness
     except RuntimeError as exc:
         root = tk.Tk()
         root.withdraw()
@@ -19,6 +19,7 @@ def main() -> None:
         sys.exit(1)
 
     enable_windows_dpi_awareness()
+    enable_crash_diagnostics()
     app = App()
     app.mainloop()
 
