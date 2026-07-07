@@ -55,15 +55,20 @@ _PROGRESS_ETA_CUMULATIVE_BLEND = 0.9
 
 
 class JobProgressTicker:
-    """Track completion rate and EMA-smoothed ETA for long-running jobs."""
+    """Track per-completion interval and derive an ETA for long-running jobs.
 
-    __slots__ = ("started_at", "total", "_last_tick_at", "_ema_spt")
+    One tick corresponds to one completed (or errored) track, so the interval
+    between ticks already reflects the effective worker concurrency. The ETA is
+    therefore ``remaining_tracks * seconds_per_completion``.
+    """
+
+    __slots__ = ("started_at", "total", "_last_tick_at", "_ema_spc")
 
     def __init__(self, started_at: float, total: int) -> None:
         self.started_at = started_at
         self.total = total
         self._last_tick_at: float | None = None
-        self._ema_spt: float | None = None
+        self._ema_spc: float | None = None
 
     def snapshot(
         self,
@@ -77,21 +82,24 @@ class JobProgressTicker:
         remaining = max(self.total - completed, 0)
 
         if completed > 0:
-            cumulative_spt = elapsed / completed
+            cumulative_spc = elapsed / completed
             if self._last_tick_at is not None:
+                # Wall-clock interval between the last two completions. With
+                # concurrency this is smaller than the processing time of one
+                # track, and it is exactly the quantity we need for ETA.
                 dt = max(now - self._last_tick_at, _PROGRESS_ETA_MIN_INTERVAL_SEC)
-                if self._ema_spt is None:
-                    self._ema_spt = cumulative_spt
+                if self._ema_spc is None:
+                    self._ema_spc = cumulative_spc
                 else:
-                    self._ema_spt = (
+                    self._ema_spc = (
                         _PROGRESS_ETA_ALPHA * dt
-                        + (1.0 - _PROGRESS_ETA_ALPHA) * self._ema_spt
+                        + (1.0 - _PROGRESS_ETA_ALPHA) * self._ema_spc
                     )
             else:
-                self._ema_spt = cumulative_spt
+                self._ema_spc = cumulative_spc
             self._last_tick_at = now
-            spt = max(self._ema_spt, cumulative_spt * _PROGRESS_ETA_CUMULATIVE_BLEND)
-            eta_seconds = remaining * spt
+            spc = max(self._ema_spc, cumulative_spc * _PROGRESS_ETA_CUMULATIVE_BLEND)
+            eta_seconds = remaining * spc
         else:
             eta_seconds = 0.0
 
