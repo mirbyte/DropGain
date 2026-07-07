@@ -1691,7 +1691,7 @@ def decide_from_measurements(
         if source_ext == ".mp3" and output_ext == ".aiff":
             decision_notes = append_note(
                 decision_notes,
-                "source MP3 will be decoded to AIFF; quality is not restored, but a second MP3 encode is avoided",
+                "source MP3 will be decoded to AIFF; second MP3 encode is avoided",
             )
         elif output_ext == ".aiff":
             decision_notes = append_note(decision_notes, "AIFF output")
