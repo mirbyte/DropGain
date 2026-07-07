@@ -178,6 +178,7 @@ class App(WaveformMixin, ctk.CTk):
         self._progress_max = 1
         self._active_pipeline: str | None = None
         self._active_phase = "idle"
+        self._run_completed = False
         self._progress_done = 0
         self._progress_total = 1
         self._batch_analysis_total = 0
@@ -1646,11 +1647,12 @@ class App(WaveformMixin, ctk.CTk):
         return done / total
 
     def _operation_phase_label(self) -> str:
+        if self._active_phase == "idle":
+            return "Done" if self._run_completed else "Ready"
         labels = {
             "preflight": "Preparing",
             "analyze": "Analyzing library",
             "render": "Rendering copies",
-            "idle": "Ready",
         }
         return labels.get(self._active_phase, "Working")
 
@@ -1814,7 +1816,7 @@ class App(WaveformMixin, ctk.CTk):
         self._cancel_operation_elapsed_refresh()
         self._restore_busy_button_label()
         if hasattr(self, "var_operation_phase"):
-            self.var_operation_phase.set("Ready")
+            self.var_operation_phase.set(self._operation_phase_label())
             self.var_operation_fraction.set("")
         self.progress.set(0)
         if hasattr(self, "progress_lt"):
@@ -1823,6 +1825,7 @@ class App(WaveformMixin, ctk.CTk):
         self.title(APP_TITLE)
 
     def _begin_operation_run(self, pipeline: str, initial_status: str) -> None:
+        self._run_completed = False
         self._active_pipeline = pipeline
         self._active_phase = "preflight"
         self._progress_done = 0
@@ -2464,6 +2467,7 @@ class App(WaveformMixin, ctk.CTk):
                             self._populate_results_table(self._analyzed_rows)
                             self._set_idle_state()
                         elif kind == "finished":
+                            self._run_completed = True
                             self._set_idle_state()
                             self.var_status.set("Done.")
                             if self._close_requested:
