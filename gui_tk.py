@@ -1352,10 +1352,15 @@ class App(WaveformMixin, ctk.CTk):
             text="Issue",
             width=55,
             height=28,
+            fg_color=ISSUE_BUTTON_BG,
+            hover_color=ISSUE_BUTTON_HOVER,
+            text_color=FG_MUTED,
+            corner_radius=BUTTON_CORNER_RADIUS,
+            font=self._font(TYPE_LABEL),
             command=self._open_report_issue,
         )
         self.btn_report_issue.grid(row=0, column=3, padx=(SPACE_2, 0))
-        self._register_tab_button(self.btn_report_issue, active=False)
+        apply_hand_cursor(self.btn_report_issue)
 
         ctk.CTkFrame(header, fg_color=BORDER_COLOR, height=1, corner_radius=0).grid(row=1, column=0, sticky="ew")
 
