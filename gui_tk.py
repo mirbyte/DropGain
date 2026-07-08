@@ -1590,6 +1590,12 @@ class App(WaveformMixin, ctk.CTk):
         self._update_busy_button_label()
 
     def _set_idle_state(self) -> None:
+        self._logger.debug(
+            "_set_idle_state: busy=%s phase=%s completed=%s",
+            self._is_run_busy(),
+            self._active_phase,
+            self._run_completed,
+        )
         if self._is_run_busy():
             if self._active_main_page == "process":
                 self._refresh_create_button_text()
@@ -1858,6 +1864,7 @@ class App(WaveformMixin, ctk.CTk):
         if hasattr(self, "var_operation_phase"):
             self.var_operation_phase.set(self._operation_phase_label())
             self.var_operation_fraction.set(self._operation_fraction_text())
+            self.update_idletasks()
 
     def _on_batch_phase(self, data: object) -> None:
         info = dict(data)  # type: ignore[arg-type]
@@ -2515,6 +2522,8 @@ class App(WaveformMixin, ctk.CTk):
             if not stop_polling:
                 try:
                     if self.winfo_exists():
+                        if not self._is_run_busy() and self._active_phase != "idle":
+                            self._set_idle_state()
                         self.after(100, self._poll_queue)
                 except tk.TclError:
                     pass
