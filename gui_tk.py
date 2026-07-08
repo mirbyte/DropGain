@@ -103,6 +103,7 @@ from processing import (
     verify_prol2_plugin,
 )
 from gui_waveform import WaveformMixin
+from gui_process import RESULTS_EMPTY_PLACEHOLDER
 from gui_theme import *  # noqa: F403
 from gui_utils import (  # noqa: F401
     ContentFadeTransition,
@@ -728,6 +729,24 @@ class App(WaveformMixin, ctk.CTk):
                 foreground=foreground,
             )
 
+    def _refresh_results_empty_message(self) -> None:
+        if not hasattr(self, "var_results_empty"):
+            return
+        if self._analyzed_rows:
+            return
+        if self._is_run_busy():
+            if self._operation_started_at is not None:
+                message = self._operation_stats_text(
+                    self._operation_last_rate,
+                    self._operation_last_eta,
+                    self._operation_last_errors,
+                )
+            else:
+                message = self.var_status.get().strip() or RESULTS_EMPTY_PLACEHOLDER
+            self.var_results_empty.set(message)
+            return
+        self.var_results_empty.set(RESULTS_EMPTY_PLACEHOLDER)
+
     def _update_results_empty_state(self, *, has_rows: bool) -> None:
         if not hasattr(self, "results_empty_label"):
             return
@@ -735,6 +754,7 @@ class App(WaveformMixin, ctk.CTk):
             self.results_empty_label.grid_remove()
         else:
             self.results_empty_label.grid()
+            self._refresh_results_empty_message()
 
     def _results_table_column_width(self, heading: str, sample_cell: str) -> int:
         heading_width = treeview_column_width_px(
@@ -1778,6 +1798,7 @@ class App(WaveformMixin, ctk.CTk):
                 self._operation_last_errors,
             )
         )
+        self._refresh_results_empty_message()
 
     def _refresh_operation_display(self, rate: float = 0.0, eta: str = "", errors: int = 0) -> None:
         if not hasattr(self, "var_operation_phase"):
@@ -1794,6 +1815,7 @@ class App(WaveformMixin, ctk.CTk):
 
         if self._active_phase in {"preflight", "analyze", "render"}:
             self.var_status.set(self._operation_stats_text(rate, eta, errors))
+        self._refresh_results_empty_message()
 
         fraction = self._operation_progress_fraction()
         self.progress.set(fraction)
@@ -1829,6 +1851,7 @@ class App(WaveformMixin, ctk.CTk):
             self.progress_lt.set(0)
         self._update_metric_phase_highlight()
         self.title(APP_TITLE)
+        self._refresh_results_empty_message()
 
     def _begin_operation_run(self, pipeline: str, initial_status: str) -> None:
         self._run_completed = False
@@ -1855,6 +1878,7 @@ class App(WaveformMixin, ctk.CTk):
         self.progress.set(0)
         if hasattr(self, "progress_lt"):
             self.progress_lt.set(0)
+        self._refresh_results_empty_message()
         self._schedule_operation_elapsed_refresh()
 
     def _set_active_phase(self, phase: str) -> None:
@@ -2437,6 +2461,7 @@ class App(WaveformMixin, ctk.CTk):
                             self._log(str(text), tag)
                         elif kind == "status":
                             self.var_status.set(str(data))
+                            self._refresh_results_empty_message()
                         elif kind == "phase":
                             self._set_active_phase(str(data))
                         elif kind == "batch_phase":
@@ -2893,6 +2918,7 @@ class App(WaveformMixin, ctk.CTk):
             if hasattr(self, "var_operation_phase"):
                 self.var_operation_phase.set("Cancelling")
                 self.var_operation_fraction.set("")
+            self._refresh_results_empty_message()
             self._logger.warning("Close requested. Cancelling after current file(s) finish.")
             try:
                 self._apply_action_button_state(self.btn_cancel, "disabled")

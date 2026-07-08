@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+RESULTS_EMPTY_PLACEHOLDER = (
+    "No tracks analyzed yet.\nSelect a source folder and click Analyze."
+)
+
 from typing import TYPE_CHECKING, Any
 
 import tkinter as tk
@@ -46,7 +50,6 @@ from gui_theme import (
     SPACE_2,
     SPACE_3,
     TYPE_BODY,
-    TYPE_CAPTION,
     TYPE_LABEL,
     TYPE_MICRO,
     WARN_FG,
@@ -496,13 +499,6 @@ class ProcessPage(ctk.CTkFrame):
         app.progress.set(0)
 
         app.var_status = tk.StringVar(value="Ready.")
-        app._label(
-            progress_frame,
-            textvariable=app.var_status,
-            color=FG_MUTED,
-            bg=BG_MAIN,
-            size=TYPE_CAPTION,
-        ).grid(row=2, column=0, sticky="w", pady=(5, 0))
 
         review_card = app._card(self, BG_PANEL, (CARD_PAD, CARD_PAD))
         review_card.grid(row=2, column=0, sticky="nsew", padx=PAGE_PADX, pady=(0, SECTION_GAP))
@@ -536,9 +532,10 @@ class ProcessPage(ctk.CTkFrame):
         app.results_table.bind("<Configure>", app._resize_results_table_columns, add="+")
         app._configure_results_table_tags()
 
+        app.var_results_empty = tk.StringVar(value=RESULTS_EMPTY_PLACEHOLDER)
         app.results_empty_label = app._label(
             review,
-            text="No tracks analyzed yet.\nSelect a source folder and click Analyze.",
+            textvariable=app.var_results_empty,
             color=FG_MUTED,
             bg=BG_PANEL,
             size=TYPE_BODY,
