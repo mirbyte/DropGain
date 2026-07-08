@@ -119,10 +119,14 @@ dBTP via native-rate decode, 4× polyphase oversampling, and peak detection on t
 Failed true-peak measurement blocks positive gain and flags manual review (overridable via **allow risky true-peak boost**).
 
 **Spectral band strength**  
-FFT band energy on the reference section only, relative to 115–1000 Hz:
+STFT band energy on the reference section only (48 kHz decode), each band expressed in dB relative to 115–1000 Hz:
 
-- 45–115 Hz (bass)
-- 20–45 Hz (sub)
+- 45–115 Hz (bass), half-open `[45, 115)`
+- 20–45 Hz (sub), half-open `[20, 45)`
+
+Hanning window; frame size `N = max(2048, min(16384, 2^floor(log2 n)))` for section length `n` samples; hop `N/2`; per-frame DC removal; band power = mean bin power over the band mask; strength = `10 * log10(median(band_power) / median(ref_power))` across frames (ratio cancels window/normalization constants between bands).
+
+At 48 kHz with `N = 16384`, bin spacing is ~2.93 Hz (~8–9 bins in the sub band). Adequate for relative weighting; noisier when `N` shrinks on short sections.
 
 Band strength affects bass-aware gain trim only, not section selection. Reported per track as `bass_strength_db` / `sub_strength_db` (results table and CSV).
 
@@ -135,7 +139,7 @@ Map loudest-section LUFS to `[target_low, target_high]`:
 
 - Below band → gain toward `target_low`
 - Above band → gain toward `target_high`
-- In band → 0 dB
+- In band → 0 dB (exact; downstream gain comparisons use 0.01 dB epsilon)
 
 **2. Peak reference**  
 Mode-dependent peak for initial ceiling evaluation:
@@ -147,7 +151,15 @@ Mode-dependent peak for initial ceiling evaluation:
 If `peak_reference + gain` exceeds the dBTP ceiling, gain is clamped. No limiter is modeled.
 
 **4. Bass-aware trim**
-Ramp from band-strength thresholds: bass and sub each have a start/full dB pair (defaults +5/+17 dB for bass, +8/+17 dB for sub) mapped linearly to a trim magnitude, capped by `bass_max_reduction` (default 0.8 dB). All four thresholds and the cap are user-configurable in Preferences (Render Rules). Trim applies independently of the LUFS-driven gain move: a positive gain suggestion is reduced, a negative one is deepened, and a track already in the target LUFS band (no gain move otherwise) gets a small standalone cut instead.
+Ramp from band-strength thresholds: bass and sub each have a start/full dB pair (defaults +5/+17 dB for bass, +8/+17 dB for sub) mapped linearly to trim magnitude ρ ∈ [0, `bass_max_reduction`] (default 0.8 dB); ρ = max(ρ_bass, ρ_sub). All four thresholds and the cap are user-configurable in Preferences (Render Rules).
+
+Applied to `suggested_gain` after steps 1–3 (clean-gain mode: peak ceiling clamp from step 3 is already included; limiter-assisted: step 3 skipped, so LUFS-mapped gain only):
+
+- G > 0.01 dB → G' = G − min(G, ρ)
+- G < −0.01 dB → G' = G − ρ
+- |G| ≤ 0.01 dB (in-band LUFS) → G' = −ρ
+
+|G'| < 0.01 dB is snapped to 0 after trim.
 
 **5. MP3 encode allowance**  
 Re-encoded MP3 outputs (non-preserve mode) add +0.8 dB to true-peak projections for encoder inter-sample peak lift. Preserve-format MP3→MP3 omits this allowance.
