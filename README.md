@@ -36,7 +36,7 @@ If you work with long material:
 
 ### Throughput (author's machine)
 
-On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs have averaged around **430 tracks/hour** (typical EDM-length material, Pro-L2  limiter-assisted mode). I would not go above 4 workers on that CPU even though it has 8 cores. Your numbers will vary with CPU, disk, track length, how many tracks need limiting vs clean gain, and output format.
+On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs have averaged around **430 tracks/hour** (typical EDM-length material, Pro-L2  limiter-assisted mode). I would not go above 2 workers on that CPU even though it has 8 cores. Your numbers will vary with CPU, disk, track length, how many tracks need limiting vs clean gain, and output format.
 
 ## What it does
 
@@ -70,30 +70,6 @@ Narrower than most commercial library tools on purpose: level and peak control, 
 - Do not want to install FFmpeg, Python, or (for full peak-limited prep) a limiter plugin (FabFilter Pro-L 2 or the free LoudMax)
 
 Commercial DJ and prep tools are often the better fit for convenience, integration, and breadth. DropGain is an alternative when your workflow cares more about explicit targets, render-stage control, and a transparent path than about all-in-one polish.
-
-## FAQ (nobody's asked yet lol)
-
-### Why use a limiter on already mastered tracks?
-
-Three reasons:
-
-1. **You want to go loud** - boosting into a true-peak ceiling without clipping requires peak control, not just turning up the fader.
-2. **You want modern EDM-style masters** - limiter-assisted mode uses a limiter (FabFilter Pro-L 2 or LoudMax, selectable in Preferences) when clean gain is not enough. That matches how a lot of current dance music is already mastered.
-3. **It is a deliberate choice** - limiter-assisted is the default because that is how I plan to prep my own library this summer. Clean gain is there when you do not want limiting. A third peak repair mode is planned for a future update.
-
-### Why are the defaults so loud?
-
-Default target band is **-7.8 to -7.5 LUFS** (loudest section), with **Limiter-assisted** as the default normalization mode. That is intentional for modern EDM libraries: current masters are hot, and if you play B2Bs or a set between other DJs, their material is usually not matched down to streaming-style levels. The defaults assume you want your prep to sit in that world, not under it.
-
-You can lower the target band, switch to **Clean gain**, or tune everything via **Library Tuning** if your library or venue needs something quieter.
-
-### Why is this free and open source?
-
-I am lazy. Shipping and supporting a commercial product is work I do not want to take on.
-
-That said, open source is also the point: you can read and change how gain, ceilings, bass trim, and limiting are decided; fork or patch behavior without trusting a black-box batch processor. Free + open source is not a claim that DropGain sounds better than commercial tools. It is a claim that the workflow is inspectable and yours to adapt.
-
-**Plus:** It reaches the widest possible audience, helps me get recognition as a bedroom DJ / beginner developer, and without a professional background in audio or software engineering, building something that can compete on a commercial level is an incredibly steep uphill battle.
 
 ## Compared to other tools
 
