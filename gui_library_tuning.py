@@ -31,7 +31,7 @@ from gui_theme import (
     TYPE_MICRO,
     WARN_FG,
 )
-from gui_utils import ui_scale_for
+from gui_utils import apply_card_hover_lift, apply_hand_cursor, ui_scale_for
 from analysis import (
     NORMALIZATION_MODE_LIMITER_ASSISTED,
     PEAK_CONTROL_SEVERITY_HEAVY,
@@ -283,6 +283,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             width=220,
         )
         self.preview_slider.pack(side="left", padx=(0, 8))
+        apply_hand_cursor(self.preview_slider)
         self.lbl_preview_target = app._label(
             preview_target_row,
             text="-7.5 LUFS (1 dB band)",
@@ -312,6 +313,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             width=220,
         )
         self.preview_budget_slider.pack(side="left", padx=(0, 8))
+        apply_hand_cursor(self.preview_budget_slider)
         self.lbl_preview_budget = app._label(
             self._limiter_preview_row,
             text="3.0 dB",
@@ -372,10 +374,10 @@ class LibraryTuningPage(ctk.CTkFrame):
                 text=label,
                 height=26,
                 command=lambda tid=tab_id: self._show_evidence_tab(tid),
-                **app._tab_button_style(active=tab_id == "distribution"),
             )
             btn.grid(row=0, column=index, padx=(0 if index == 0 else 4, 0))
             self._evidence_tab_buttons[tab_id] = btn
+            app._register_tab_button(btn, active=tab_id == "distribution")
 
         self.evidence_content = ctk.CTkFrame(evidence, fg_color=LOG_BG, corner_radius=6)
         self.evidence_content.grid(row=1, column=0, sticky="nsew")
@@ -414,7 +416,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             return
 
         for key, btn in self._evidence_tab_buttons.items():
-            btn.configure(**self._app._tab_button_style(active=key == tab_id))
+            self._app._configure_tab_button(btn, active=key == tab_id)
 
         def swap() -> None:
             self._active_evidence_tab = tab_id

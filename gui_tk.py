@@ -110,17 +110,20 @@ from gui_utils import (  # noqa: F401
     DropGainTooltip,
     GuiQueueLogHandler,
     TreeviewHeadingTooltip,
+    apply_hand_cursor,
     enable_windows_dpi_awareness,
     fit_window_bounds,
     logical_screen_size,
     logical_widget_width,
     make_tooltip_label,
+    pointer_inside_widget,
     position_tooltip_window,
     scaled_px,
     scaled_px_from_float,
     treeview_column_width_px,
     treeview_rowheight_px,
     ui_scale_for,
+    wire_ctk_button_press,
 )
 
 GUI_TICK_MIN_INTERVAL_SEC = 0.35
@@ -875,7 +878,232 @@ class App(WaveformMixin, ctk.CTk):
 
         button._dropgain_accent = accent  # type: ignore[attr-defined]
         self._apply_action_button_state(button, state)
+        self._wire_button_hover(button)
+
+        def _restore_after_press(b: ctk.CTkButton = button) -> None:
+            self._apply_action_button_state(b, str(b.cget("state")))
+            tween = getattr(b, "_dropgain_button_tween", None)
+            if tween is not None and pointer_inside_widget(b):
+                tween(True)
+
+        wire_ctk_button_press(
+            button,
+            lambda b=button: ACCENT_ACTIVE if getattr(b, "_dropgain_accent", False) else BUTTON_SECONDARY_ACTIVE,
+            restore=_restore_after_press,
+        )
         return button
+
+    def _register_tab_button(self, button: ctk.CTkButton, *, active: bool) -> None:
+        button._dropgain_tab_active = active  # type: ignore[attr-defined]
+        if not getattr(button, "_dropgain_tab_hover_wired", False):
+            self._wire_tab_button_hover(button)
+        if not getattr(button, "_dropgain_press_wired", False):
+            wire_ctk_button_press(
+                button,
+                lambda b=button: (
+                    TAB_ACTIVE_PRESS
+                    if getattr(b, "_dropgain_tab_active", False)
+                    else BUTTON_SECONDARY_ACTIVE
+                ),
+                restore=lambda b=button: b.configure(
+                    **self._tab_button_style(active=getattr(b, "_dropgain_tab_active", False))
+                ),
+            )
+        apply_hand_cursor(button)
+        button.configure(**self._tab_button_style(active=active))
+
+    def _configure_tab_button(self, button: ctk.CTkButton, *, active: bool) -> None:
+        button._dropgain_tab_active = active  # type: ignore[attr-defined]
+        button.configure(**self._tab_button_style(active=active))
+
+    def _wire_tab_button_hover(self, button: ctk.CTkButton) -> None:
+        button._dropgain_tab_hover_wired = True  # type: ignore[attr-defined]
+        # Remove CTkButton's native hover bindings so we can drive the hover animation ourselves.
+        try:
+            button.unbind("<Enter>")
+            button.unbind("<Leave>")
+        except Exception:
+            pass
+        hover_state = {"target": False, "step": 0, "after_id": None}
+
+        def _rest_colors() -> tuple[str, str, str]:
+            active = getattr(button, "_dropgain_tab_active", False)
+            if active:
+                return ACCENT_DIM, ICE_DIM, ACCENT
+            return BG_MAIN, BG_MAIN, FG_MUTED
+
+        def _set_colors(step: int, steps: int) -> None:
+            rest_fg, rest_hover, rest_text = _rest_colors()
+            if step <= 0:
+                button.configure(fg_color=rest_fg, hover_color=rest_hover, text_color=rest_text)
+                return
+            if step >= steps:
+                button.configure(fg_color=TAB_INACTIVE_HOVER_BG, hover_color=TAB_INACTIVE_HOVER_BG, text_color=TAB_INACTIVE_HOVER_TEXT)
+                return
+            ratio = step / steps
+            button.configure(
+                fg_color=self._blend_color(rest_fg, TAB_INACTIVE_HOVER_BG, ratio),
+                hover_color=self._blend_color(rest_hover, TAB_INACTIVE_HOVER_BG, ratio),
+                text_color=self._blend_color(rest_text, TAB_INACTIVE_HOVER_TEXT, ratio),
+            )
+
+        def _tween(target: bool) -> None:
+            if hover_state["target"] == target:
+                return
+            hover_state["target"] = target
+            if hover_state["after_id"] is not None:
+                try:
+                    button.after_cancel(hover_state["after_id"])
+                except Exception:
+                    pass
+                hover_state["after_id"] = None
+
+            def step() -> None:
+                hover_state["after_id"] = None
+                if hover_state["target"]:
+                    hover_state["step"] = min(hover_state["step"] + 1, TAB_HOVER_TWEEN_STEPS)
+                else:
+                    hover_state["step"] = max(hover_state["step"] - 1, 0)
+                _set_colors(hover_state["step"], TAB_HOVER_TWEEN_STEPS)
+                if (hover_state["target"] and hover_state["step"] < TAB_HOVER_TWEEN_STEPS) or (
+                    not hover_state["target"] and hover_state["step"] > 0
+                ):
+                    hover_state["after_id"] = button.after(TAB_HOVER_TWEEN_MS, step)
+
+            step()
+
+        def _on_enter(event: tk.Event) -> None:
+            try:
+                if str(button.cget("state")) == "disabled":
+                    return
+            except Exception:
+                return
+            if getattr(button, "_dropgain_tab_active", False):
+                return
+            _tween(True)
+
+        def _on_leave(event: tk.Event) -> None:
+            try:
+                if str(button.cget("state")) == "disabled":
+                    return
+            except Exception:
+                return
+            _tween(False)
+
+        button.bind("<Enter>", _on_enter, add="+")
+        button.bind("<Leave>", _on_leave, add="+")
+
+    @staticmethod
+    def _blend_color(from_hex: str, to_hex: str, ratio: float) -> str:
+        """Linearly interpolate between two hex colors. Transparent is treated as BG_MAIN."""
+        if from_hex == "transparent":
+            from_hex = BG_MAIN
+        if to_hex == "transparent":
+            to_hex = BG_MAIN
+        from_rgb = tuple(int(from_hex[i:i+2], 16) for i in (1, 3, 5))
+        to_rgb = tuple(int(to_hex[i:i+2], 16) for i in (1, 3, 5))
+        return "#" + "".join(f"{int(round(f + (t - f) * ratio)):02x}" for f, t in zip(from_rgb, to_rgb))
+
+    def _wire_button_hover(self, button: ctk.CTkButton) -> None:
+        if getattr(button, "_dropgain_button_hover_wired", False):
+            return
+        button._dropgain_button_hover_wired = True  # type: ignore[attr-defined]
+        try:
+            button.unbind("<Enter>")
+            button.unbind("<Leave>")
+        except Exception:
+            pass
+
+        hover_state = {"target": False, "step": 0, "after_id": None}
+
+        def _rest_colors() -> tuple[str, str, str]:
+            accent = bool(getattr(button, "_dropgain_accent", False))
+            if accent:
+                return ACCENT, ACCENT, BUTTON_TEXT_DARK
+            return BUTTON_SECONDARY_BG, BUTTON_SECONDARY_BG, FG_MAIN
+
+        def _hover_colors() -> tuple[str, str, str]:
+            accent = bool(getattr(button, "_dropgain_accent", False))
+            if accent:
+                return ACCENT_HOVER, ACCENT_HOVER, BUTTON_TEXT_DARK
+            return BUTTON_SECONDARY_HOVER, BUTTON_SECONDARY_HOVER, FG_MAIN
+
+        def _set_colors(step: int, steps: int) -> None:
+            rest_fg, rest_hover, rest_text = _rest_colors()
+            hover_fg, hover_hover, hover_text = _hover_colors()
+            if step <= 0:
+                button.configure(fg_color=rest_fg, hover_color=rest_hover, text_color=rest_text)
+                return
+            if step >= steps:
+                button.configure(fg_color=hover_fg, hover_color=hover_hover, text_color=hover_text)
+                return
+            ratio = step / steps
+            button.configure(
+                fg_color=self._blend_color(rest_fg, hover_fg, ratio),
+                hover_color=self._blend_color(rest_hover, hover_hover, ratio),
+                text_color=self._blend_color(rest_text, hover_text, ratio),
+            )
+
+        def _tween(target: bool) -> None:
+            if hover_state["target"] == target:
+                return
+            hover_state["target"] = target
+            if hover_state["after_id"] is not None:
+                try:
+                    button.after_cancel(hover_state["after_id"])
+                except Exception:
+                    pass
+                hover_state["after_id"] = None
+
+            def step() -> None:
+                hover_state["after_id"] = None
+                if hover_state["target"]:
+                    hover_state["step"] = min(hover_state["step"] + 1, HOVER_TWEEN_STEPS)
+                else:
+                    hover_state["step"] = max(hover_state["step"] - 1, 0)
+                _set_colors(hover_state["step"], HOVER_TWEEN_STEPS)
+                if (hover_state["target"] and hover_state["step"] < HOVER_TWEEN_STEPS) or (
+                    not hover_state["target"] and hover_state["step"] > 0
+                ):
+                    hover_state["after_id"] = button.after(HOVER_TWEEN_MS, step)
+
+            step()
+
+        button._dropgain_button_tween = _tween  # type: ignore[attr-defined]
+        _set_colors(0, HOVER_TWEEN_STEPS)
+
+        def _on_enter(event: tk.Event) -> None:
+            try:
+                if str(button.cget("state")) == "disabled":
+                    return
+            except Exception:
+                return
+            if getattr(button, "_dropgain_pressing", False):
+                return
+            _tween(True)
+
+        def _on_leave(event: tk.Event) -> None:
+            try:
+                if str(button.cget("state")) == "disabled":
+                    return
+            except Exception:
+                return
+            if getattr(button, "_dropgain_pressing", False):
+                return
+            _tween(False)
+
+        button.bind("<Enter>", _on_enter, add="+")
+        button.bind("<Leave>", _on_leave, add="+")
+
+    def _update_window_cursor(self) -> None:
+        desired = CURSOR_BUSY if self._is_run_busy() else ""
+        if getattr(self, "_dropgain_cursor", None) == desired:
+            return
+        try:
+            self.configure(cursor=desired)
+            self._dropgain_cursor = desired  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
     def _apply_action_button_state(self, button: ctk.CTkButton, state: str) -> None:
         disabled = state == "disabled"
@@ -886,6 +1114,7 @@ class App(WaveformMixin, ctk.CTk):
                 fg_color=BUTTON_DISABLED_FG,
                 hover_color=BUTTON_DISABLED_FG,
                 border_width=0,
+                cursor="",
             )
             return
 
@@ -893,22 +1122,24 @@ class App(WaveformMixin, ctk.CTk):
             button.configure(
                 state="normal",
                 fg_color=ACCENT,
-                hover_color=ACCENT_HOVER,
+                hover_color=ACCENT,
                 border_color=ACCENT,
                 text_color=BUTTON_TEXT_DARK,
+                cursor=CURSOR_POINTER,
             )
             return
 
         button.configure(
             state="normal",
             fg_color=BUTTON_SECONDARY_BG,
-            hover_color=BUTTON_SECONDARY_HOVER,
+            hover_color=BUTTON_SECONDARY_BG,
             border_width=0,
             text_color=FG_MAIN,
+            cursor=CURSOR_POINTER,
         )
 
     def _tab_button_style(self, *, active: bool) -> dict[str, Any]:
-        base = {"corner_radius": BUTTON_CORNER_RADIUS}
+        base = {"corner_radius": BUTTON_CORNER_RADIUS, "cursor": CURSOR_POINTER}
         if active:
             return {
                 **base,
@@ -921,8 +1152,8 @@ class App(WaveformMixin, ctk.CTk):
             }
         return {
             **base,
-            "fg_color": "transparent",
-            "hover_color": BUTTON_SECONDARY_BG,
+            "fg_color": BG_MAIN,
+            "hover_color": BG_MAIN,
             "border_width": 0,
             "text_color": FG_MUTED,
             "font": self._font(TYPE_LABEL),
@@ -1093,27 +1324,27 @@ class App(WaveformMixin, ctk.CTk):
             width=100,
             height=28,
             command=lambda: self._show_main_page("process"),
-            **self._tab_button_style(active=True),
         )
         self.btn_nav_process.grid(row=0, column=0, padx=(0, SPACE_2))
+        self._register_tab_button(self.btn_nav_process, active=True)
         self.btn_nav_library = ctk.CTkButton(
             nav,
             text="LIBRARY TUNING",
             width=130,
             height=28,
             command=lambda: self._show_main_page("library"),
-            **self._tab_button_style(active=False),
         )
         self.btn_nav_library.grid(row=0, column=1, padx=(0, SPACE_2))
+        self._register_tab_button(self.btn_nav_library, active=False)
         self.btn_nav_preferences = ctk.CTkButton(
             nav,
             text="PREFERENCES",
             width=110,
             height=28,
             command=lambda: self._show_main_page("preferences"),
-            **self._tab_button_style(active=False),
         )
         self.btn_nav_preferences.grid(row=0, column=2)
+        self._register_tab_button(self.btn_nav_preferences, active=False)
         self.btn_settings = self.btn_nav_preferences
 
         self.btn_report_issue = ctk.CTkButton(
@@ -1122,9 +1353,9 @@ class App(WaveformMixin, ctk.CTk):
             width=55,
             height=28,
             command=self._open_report_issue,
-            **self._tab_button_style(active=False),
         )
         self.btn_report_issue.grid(row=0, column=3, padx=(SPACE_2, 0))
+        self._register_tab_button(self.btn_report_issue, active=False)
 
         ctk.CTkFrame(header, fg_color=BORDER_COLOR, height=1, corner_radius=0).grid(row=1, column=0, sticky="ew")
 
@@ -1228,9 +1459,9 @@ class App(WaveformMixin, ctk.CTk):
         if target_page is None:
             return
 
-        self.btn_nav_process.configure(**self._tab_button_style(active=name == "process"))
-        self.btn_nav_library.configure(**self._tab_button_style(active=name == "library"))
-        self.btn_nav_preferences.configure(**self._tab_button_style(active=name == "preferences"))
+        self._configure_tab_button(self.btn_nav_process, active=name == "process")
+        self._configure_tab_button(self.btn_nav_library, active=name == "library")
+        self._configure_tab_button(self.btn_nav_preferences, active=name == "preferences")
 
         def swap() -> None:
             page_map = {
@@ -1280,9 +1511,9 @@ class App(WaveformMixin, ctk.CTk):
             return
 
         if hasattr(self, "btn_output_waveform"):
-            self.btn_output_waveform.configure(**self._tab_button_style(active=not show_log))
+            self._configure_tab_button(self.btn_output_waveform, active=not show_log)
         if hasattr(self, "btn_output_log"):
-            self.btn_output_log.configure(**self._tab_button_style(active=show_log))
+            self._configure_tab_button(self.btn_output_log, active=show_log)
 
         def swap() -> None:
             if show_log:
@@ -1614,6 +1845,7 @@ class App(WaveformMixin, ctk.CTk):
             self._apply_action_button_state(self.btn_lt_analyze, "disabled")
         self._set_run_controls_state("disabled")
         self._update_busy_button_label()
+        self._update_window_cursor()
 
     def _set_idle_state(self) -> None:
         self._logger.debug(
@@ -1625,6 +1857,7 @@ class App(WaveformMixin, ctk.CTk):
         if self._is_run_busy():
             if self._active_main_page == "process":
                 self._refresh_create_button_text()
+            self._update_window_cursor()
             return
 
         if self._is_preferences_active():
@@ -1635,9 +1868,11 @@ class App(WaveformMixin, ctk.CTk):
                 except tk.TclError:
                     pass
             self._mark_main_page_visuals_dirty()
+            self._update_window_cursor()
             return
 
         self._apply_idle_state_controls()
+        self._update_window_cursor()
 
     def _apply_idle_state_controls(self) -> None:
         self._set_run_controls_state("normal")

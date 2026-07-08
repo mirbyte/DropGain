@@ -566,18 +566,18 @@ class ProcessPage(ctk.CTkFrame):
             width=80,
             height=26,
             command=lambda: app._show_output_tab("Waveform"),
-            **app._tab_button_style(active=True),
         )
         app.btn_output_waveform.grid(row=0, column=0, padx=(0, SPACE_1))
+        app._register_tab_button(app.btn_output_waveform, active=True)
         app.btn_output_log = ctk.CTkButton(
             output_tab_buttons,
             text="Log",
             width=52,
             height=26,
             command=lambda: app._show_output_tab("Log"),
-            **app._tab_button_style(active=False),
         )
         app.btn_output_log.grid(row=0, column=1)
+        app._register_tab_button(app.btn_output_log, active=False)
 
         app.output_content = ctk.CTkFrame(
             output,

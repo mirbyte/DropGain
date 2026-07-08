@@ -34,6 +34,7 @@ from gui_theme import (
     BG_MAIN,
     BORDER_COLOR,
     BUTTON_CORNER_RADIUS,
+    BUTTON_SECONDARY_ACTIVE,
     BUTTON_SECONDARY_BG,
     BUTTON_SECONDARY_HOVER,
     BUTTON_TEXT_DARK,
@@ -52,7 +53,7 @@ from gui_theme import (
     TYPE_BODY,
     TYPE_LABEL,
 )
-from gui_utils import logical_widget_width
+from gui_utils import apply_hand_cursor, logical_widget_width, pointer_inside_widget, wire_ctk_button_press
 
 if TYPE_CHECKING:
     from gui_tk import App
@@ -79,6 +80,7 @@ class CTkNumberInput(ctk.CTkFrame):
         integer: bool = False,
         entry_font: Any = None,
         button_font: Any = None,
+        app: Any = None,
     ) -> None:
         super().__init__(master, fg_color="transparent")
         self._variable = variable
@@ -86,6 +88,7 @@ class CTkNumberInput(ctk.CTkFrame):
         self._to = float(to)
         self._increment = float(increment)
         self._integer = integer
+        self._app = app
 
         self.btn_minus = ctk.CTkButton(
             self,
@@ -129,9 +132,31 @@ class CTkNumberInput(ctk.CTkFrame):
         )
         self.btn_plus.pack(side="left")
 
+        for step_button in (self.btn_minus, self.btn_plus):
+            apply_hand_cursor(step_button)
+            step_button._dropgain_accent = False  # type: ignore[attr-defined]
+            if self._app is not None:
+                self._app._wire_button_hover(step_button)
+
+            def _restore_stepper(b: ctk.CTkButton = step_button) -> None:
+                b.configure(fg_color=BUTTON_SECONDARY_BG, hover_color=BUTTON_SECONDARY_BG)
+                tween = getattr(b, "_dropgain_button_tween", None)
+                if tween is not None and pointer_inside_widget(b):
+                    tween(True)
+
+            wire_ctk_button_press(
+                step_button,
+                lambda: BUTTON_SECONDARY_ACTIVE,
+                restore=_restore_stepper if self._app is not None else lambda b=step_button: b.configure(
+                    fg_color=BUTTON_SECONDARY_BG,
+                    hover_color=BUTTON_SECONDARY_HOVER,
+                ),
+            )
+
     def configure_state(self, state: str) -> None:
-        self.btn_minus.configure(state=state)
-        self.btn_plus.configure(state=state)
+        cursor = "hand2" if state == "normal" else ""
+        self.btn_minus.configure(state=state, cursor=cursor)
+        self.btn_plus.configure(state=state, cursor=cursor)
         self.entry.configure(state=state)
 
     def _step(self, delta: float) -> None:
@@ -211,18 +236,16 @@ class PreferencesPage(ctk.CTkFrame):
         footer = ctk.CTkFrame(self, fg_color="transparent")
         footer.grid(row=1, column=0, sticky="ew", padx=PAGE_PADX, pady=(0, SPACE_3))
         footer_button_height = 40
-        ctk.CTkButton(
+        btn_reset_defaults = app._button(
             footer,
             text="Reset Defaults",
             command=app._reset_defaults,
-            fg_color=BUTTON_SECONDARY_BG,
-            hover_color=BUTTON_SECONDARY_HOVER,
-            border_width=0,
-            text_color=FG_MAIN,
-            font=app._font(TYPE_BODY),
+        )
+        btn_reset_defaults.configure(
             height=footer_button_height,
             corner_radius=4,
-        ).pack(side="left")
+        )
+        btn_reset_defaults.pack(side="left")
         self.btn_system_check = app._button(
             footer,
             text="Check Limiter / System",
@@ -414,6 +437,7 @@ class PreferencesPage(ctk.CTkFrame):
             width=width,
             entry_font=self.app._font(SETTINGS_TEXT),
             button_font=self.app._font(SETTINGS_TEXT, "bold"),
+            app=self.app,
         )
         number_input.pack(side="left", padx=(7, 4))
         self._number_inputs.append(number_input)
@@ -447,6 +471,7 @@ class PreferencesPage(ctk.CTkFrame):
             width=width,
             entry_font=self.app._font(SETTINGS_TEXT),
             button_font=self.app._font(SETTINGS_TEXT, "bold"),
+            app=self.app,
         )
         number_input.pack(side="left")
         self._number_inputs.append(number_input)

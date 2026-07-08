@@ -11,7 +11,9 @@ import tkinter as tk
 from tkinter import ttk
 
 from gui_theme import (
+    ACCENT,
     BG_FIELD,
+    BORDER_COLOR,
     FG_MAIN,
     TOOLTIP_OFFSET_X,
     TOOLTIP_OFFSET_Y,
@@ -647,3 +649,105 @@ class ContentFadeTransition:
                 overlay.destroy()
             except Exception:
                 pass
+
+
+def apply_hand_cursor(widget: tk.Widget) -> None:
+    """Use a pointer cursor for clickable widgets."""
+    try:
+        widget.configure(cursor="hand2")
+    except Exception:
+        pass
+
+
+def pointer_inside_widget(widget: tk.Widget) -> bool:
+    """Return True if the screen pointer is currently inside the widget bounds."""
+    try:
+        x = widget.winfo_pointerx()
+        y = widget.winfo_pointery()
+        left = widget.winfo_rootx()
+        top = widget.winfo_rooty()
+        right = left + widget.winfo_width()
+        bottom = top + widget.winfo_height()
+        return left <= x <= right and top <= y <= bottom
+    except Exception:
+        return False
+
+
+def apply_card_hover_lift(
+    frame: tk.Widget,
+    *,
+    hover_border: str = ACCENT,
+    rest_border: str = BORDER_COLOR,
+) -> None:
+    """Shift a card's border to the accent color while the pointer is over it.
+
+    Uses a pointer-bbox check on a deferred callback so moving the pointer
+    onto a child widget (which fires a spurious Leave on the frame) does not
+    flicker the border back and forth.
+    """
+    if getattr(frame, "_dropgain_hover_lift_wired", False):
+        return
+    frame._dropgain_hover_lift_wired = True  # type: ignore[attr-defined]
+    state = {"hover": False}
+
+    def _apply(hover: bool) -> None:
+        if state["hover"] == hover:
+            return
+        state["hover"] = hover
+        try:
+            frame.configure(border_color=hover_border if hover else rest_border)
+        except Exception:
+            pass
+
+    def _on_enter(_event: tk.Event) -> None:
+        if pointer_inside_widget(frame):
+            _apply(True)
+
+    def _on_leave(_event: tk.Event) -> None:
+        try:
+            frame.after_idle(lambda: _apply(pointer_inside_widget(frame)))
+        except Exception:
+            _apply(False)
+
+    frame.bind("<Enter>", _on_enter, add="+")
+    frame.bind("<Leave>", _on_leave, add="+")
+
+
+def wire_ctk_button_press(
+    button: tk.Widget,
+    press_fg: Callable[[], str],
+    *,
+    restore: Callable[[], None] | None = None,
+) -> None:
+    """Briefly darken a CTkButton while the primary mouse button is held."""
+    if getattr(button, "_dropgain_press_wired", False):
+        return
+    button._dropgain_press_wired = True  # type: ignore[attr-defined]
+
+    def _restore(_event: tk.Event | None = None) -> None:
+        if not getattr(button, "_dropgain_pressing", False):
+            return
+        button._dropgain_pressing = False  # type: ignore[attr-defined]
+        if restore is not None:
+            restore()
+            return
+        saved = getattr(button, "_dropgain_saved_fg", None)
+        if saved is not None:
+            button.configure(fg_color=saved)
+
+    def _on_press(_event: tk.Event) -> None:
+        try:
+            if str(button.cget("state")) == "disabled":
+                return
+        except Exception:
+            return
+        button._dropgain_pressing = True  # type: ignore[attr-defined]
+        try:
+            button._dropgain_saved_fg = button.cget("fg_color")  # type: ignore[attr-defined]
+            button.configure(fg_color=press_fg())
+        except Exception:
+            button._dropgain_pressing = False  # type: ignore[attr-defined]
+
+    button.bind("<ButtonPress-1>", _on_press, add="+")
+    button.bind("<ButtonRelease-1>", _restore, add="+")
+    button.bind("<Leave>", _restore, add="+")
