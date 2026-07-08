@@ -331,15 +331,7 @@ class WaveformMixin:
     def _show_waveform_preview(self, preview: dict[str, object]) -> None:
         self._current_waveform_data = preview
         self.var_waveform_title.set(str(preview.get("filename", "") or "Selected track"))
-
-        start = self._optional_float(preview.get("loudest_section_start_sec"))
-        end = self._optional_float(preview.get("loudest_section_end_sec"))
-        if start is not None and end is not None and end > start:
-            section_text = f"Loudest section {self._format_time_short(start)}–{self._format_time_short(end)}"
-        else:
-            section_text = "Loudest section unavailable"
-
-        self.var_waveform_stats.set(section_text)
+        self.var_waveform_stats.set("")
         try:
             self._show_output_tab("Waveform")
         except Exception:

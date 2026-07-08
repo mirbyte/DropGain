@@ -738,10 +738,15 @@ class App(WaveformMixin, ctk.CTk):
                 foreground=foreground,
             )
 
+    def _should_show_results_operation_overlay(self) -> bool:
+        if not self._analyzed_rows:
+            return True
+        return self._active_phase == "render" and self._is_run_busy()
+
     def _refresh_results_empty_message(self) -> None:
         if not hasattr(self, "var_results_empty"):
             return
-        if self._analyzed_rows:
+        if not self._should_show_results_operation_overlay():
             return
         if self._is_run_busy():
             if self._operation_started_at is not None:
@@ -759,7 +764,10 @@ class App(WaveformMixin, ctk.CTk):
     def _update_results_empty_state(self, *, has_rows: bool) -> None:
         if not hasattr(self, "results_empty_label"):
             return
-        if has_rows:
+        if self._should_show_results_operation_overlay():
+            self.results_empty_label.grid()
+            self._refresh_results_empty_message()
+        elif has_rows:
             self.results_empty_label.grid_remove()
         else:
             self.results_empty_label.grid()
@@ -2170,7 +2178,7 @@ class App(WaveformMixin, ctk.CTk):
         self._set_progress_bars(0.0, immediate=True)
         self._update_metric_phase_highlight()
         self.title(APP_TITLE)
-        self._refresh_results_empty_message()
+        self._update_results_empty_state(has_rows=bool(self._analyzed_rows))
 
     def _begin_operation_run(self, pipeline: str, initial_status: str) -> None:
         self._run_completed = False
@@ -2210,6 +2218,8 @@ class App(WaveformMixin, ctk.CTk):
             self.var_operation_phase.set(self._operation_phase_label())
             self.var_operation_fraction.set(self._operation_fraction_text())
             self.update_idletasks()
+        if hasattr(self, "results_empty_label"):
+            self._update_results_empty_state(has_rows=bool(self._analyzed_rows))
 
     def _on_batch_phase(self, data: object) -> None:
         info = dict(data)  # type: ignore[arg-type]
