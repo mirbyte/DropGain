@@ -43,7 +43,7 @@ On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs 
 - **Library analysis** - recursive scan; programme and section LUFS, dBTP, sample peak, suggested gain, projections, and processing action per row
 - **Section-based targeting** - loudest sliding window (default 20 s / 5 s hop); true-peak ceiling wins over LUFS when they conflict
 - **Clean gain or limiter-assisted** - linear gain when the ceiling allows; a limiter engine (FabFilter Pro-L 2 or LoudMax) with `max_reduction` cap when peak control is needed
-- **Bass-aware trim** - on positive gain only; low-band energy can reduce boost on bass-heavy sections
+- **Bass-aware trim** - low-band energy can reduce boost on bass-heavy sections
 - **`_DG` outputs** - copies beside sources or under a separate root; preserve format, force AIFF/MP3, or decode MP3 to AIFF to avoid double lossy encode
 - **Library Tuning** - profile the library; recommend targets, window/hop, thresholds, and ceiling
 - **Verification** - post-render re-measurement; loudness-normalization tags stripped; optional CSV (`dropgain_report.csv`) and session log
@@ -146,7 +146,7 @@ Mode-dependent peak for initial ceiling evaluation:
 **3. Clean-gain ceiling** (clean gain mode)  
 If `peak_reference + gain` exceeds the dBTP ceiling, gain is clamped. No limiter is modeled.
 
-**4. Bass-aware trim** (positive gain only)  
+**4. Bass-aware trim**
 Ramp from band-strength thresholds (bass: +3 to +12 dB relative strength, max 0.6 dB gain reduction; sub: analogous curve). Attenuation suggestions are unchanged.
 
 **5. MP3 encode allowance**  
