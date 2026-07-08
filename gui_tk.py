@@ -56,6 +56,12 @@ from analysis import (
     DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     MIN_BASS_MAX_BOOST_REDUCTION_DB,
     MAX_BASS_MAX_BOOST_REDUCTION_DB,
+    DEFAULT_BASS_PENALTY_START_DB,
+    DEFAULT_BASS_PENALTY_FULL_DB,
+    DEFAULT_SUB_PENALTY_START_DB,
+    DEFAULT_SUB_PENALTY_FULL_DB,
+    MIN_BASS_PENALTY_THRESHOLD_DB,
+    MAX_BASS_PENALTY_THRESHOLD_DB,
     DEFAULT_NORMALIZATION_MODE,
     DEFAULT_APPLY_RENDER_GAIN_THRESHOLD,
     DEFAULT_OUTPUT_FORMAT_MODE,
@@ -476,6 +482,10 @@ class App(WaveformMixin, ctk.CTk):
                 "workers": int(float(self.var_workers.get())),
                 "max_reduction": float(self.var_max_reduction.get()),
                 "bass_max_reduction": float(self.var_bass_max_reduction.get()),
+                "bass_penalty_start": float(self.var_bass_penalty_start.get()),
+                "bass_penalty_full": float(self.var_bass_penalty_full.get()),
+                "sub_penalty_start": float(self.var_sub_penalty_start.get()),
+                "sub_penalty_full": float(self.var_sub_penalty_full.get()),
                 "peak_ceiling": float(self.var_peak_ceiling.get()),
                 "normalization_mode": normalize_normalization_mode(self.var_normalization_mode.get()),
                 "limiter_engine": normalize_limiter_engine(self.var_limiter_engine.get()),
@@ -1219,6 +1229,18 @@ class App(WaveformMixin, ctk.CTk):
         self.var_bass_max_reduction = tk.DoubleVar(
             value=self._setting_float(settings, "bass_max_reduction", DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
         )
+        self.var_bass_penalty_start = tk.DoubleVar(
+            value=self._setting_float(settings, "bass_penalty_start", DEFAULT_BASS_PENALTY_START_DB)
+        )
+        self.var_bass_penalty_full = tk.DoubleVar(
+            value=self._setting_float(settings, "bass_penalty_full", DEFAULT_BASS_PENALTY_FULL_DB)
+        )
+        self.var_sub_penalty_start = tk.DoubleVar(
+            value=self._setting_float(settings, "sub_penalty_start", DEFAULT_SUB_PENALTY_START_DB)
+        )
+        self.var_sub_penalty_full = tk.DoubleVar(
+            value=self._setting_float(settings, "sub_penalty_full", DEFAULT_SUB_PENALTY_FULL_DB)
+        )
         self.var_peak_ceiling = tk.DoubleVar(value=self._setting_float(settings, "peak_ceiling", DEFAULT_BOOST_PEAK_CEILING_DBFS))
         self.var_mp3_threshold = tk.DoubleVar(value=self._setting_float(settings, "mp3_threshold", MP3_MIN_ABS_GAIN_DB))
         self.var_lossless_threshold = tk.DoubleVar(value=self._setting_float(settings, "lossless_threshold", LOSSLESS_MIN_ABS_GAIN_DB))
@@ -1556,6 +1578,10 @@ class App(WaveformMixin, ctk.CTk):
             self.var_target_high,
             self.var_max_reduction,
             self.var_bass_max_reduction,
+            self.var_bass_penalty_start,
+            self.var_bass_penalty_full,
+            self.var_sub_penalty_start,
+            self.var_sub_penalty_full,
             self.var_peak_ceiling,
             self.var_mp3_threshold,
             self.var_lossless_threshold,
@@ -2283,6 +2309,10 @@ class App(WaveformMixin, ctk.CTk):
             self.var_target_high.set(DEFAULT_TARGET_HIGH_LUFS)
             self.var_max_reduction.set(DEFAULT_MAX_REDUCTION_DB)
             self.var_bass_max_reduction.set(DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
+            self.var_bass_penalty_start.set(DEFAULT_BASS_PENALTY_START_DB)
+            self.var_bass_penalty_full.set(DEFAULT_BASS_PENALTY_FULL_DB)
+            self.var_sub_penalty_start.set(DEFAULT_SUB_PENALTY_START_DB)
+            self.var_sub_penalty_full.set(DEFAULT_SUB_PENALTY_FULL_DB)
             self.var_peak_ceiling.set(DEFAULT_BOOST_PEAK_CEILING_DBFS)
             self.var_normalization_mode.set(DEFAULT_NORMALIZATION_MODE)
             self.var_limiter_engine.set(DEFAULT_LIMITER_ENGINE)
@@ -2493,6 +2523,22 @@ class App(WaveformMixin, ctk.CTk):
                 MIN_BASS_MAX_BOOST_REDUCTION_DB,
                 min(MAX_BASS_MAX_BOOST_REDUCTION_DB, float(self.var_bass_max_reduction.get())),
             )
+            bass_penalty_start = max(
+                MIN_BASS_PENALTY_THRESHOLD_DB,
+                min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_start.get())),
+            )
+            bass_penalty_full = max(
+                MIN_BASS_PENALTY_THRESHOLD_DB,
+                min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_full.get())),
+            )
+            sub_penalty_start = max(
+                MIN_BASS_PENALTY_THRESHOLD_DB,
+                min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_start.get())),
+            )
+            sub_penalty_full = max(
+                MIN_BASS_PENALTY_THRESHOLD_DB,
+                min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
+            )
             peak_ceiling = float(self.var_peak_ceiling.get())
             normalization_mode = normalize_normalization_mode(self.var_normalization_mode.get())
             limiter_engine = normalize_limiter_engine(self.var_limiter_engine.get())
@@ -2605,6 +2651,10 @@ class App(WaveformMixin, ctk.CTk):
                 hop_seconds,
                 max_reduction,
                 bass_max_reduction,
+                bass_penalty_start,
+                bass_penalty_full,
+                sub_penalty_start,
+                sub_penalty_full,
                 peak_ceiling,
                 normalization_mode,
                 limiter_engine,
@@ -2688,6 +2738,10 @@ class App(WaveformMixin, ctk.CTk):
         hop_seconds: float,
         max_reduction: float,
         bass_max_reduction: float,
+        bass_penalty_start: float,
+        bass_penalty_full: float,
+        sub_penalty_start: float,
+        sub_penalty_full: float,
         peak_ceiling: float,
         normalization_mode: str,
         limiter_engine: str,
@@ -2714,6 +2768,10 @@ class App(WaveformMixin, ctk.CTk):
                 hop_seconds=hop_seconds,
                 max_reduction_db=max_reduction,
                 bass_max_reduction_db=bass_max_reduction,
+                bass_penalty_start_db=bass_penalty_start,
+                bass_penalty_full_db=bass_penalty_full,
+                sub_penalty_start_db=sub_penalty_start,
+                sub_penalty_full_db=sub_penalty_full,
                 peak_ceiling_dbfs=peak_ceiling,
                 normalization_mode=normalization_mode,
                 limiter_engine=limiter_engine,
@@ -3063,6 +3121,22 @@ class App(WaveformMixin, ctk.CTk):
                     MIN_BASS_MAX_BOOST_REDUCTION_DB,
                     min(MAX_BASS_MAX_BOOST_REDUCTION_DB, float(self.var_bass_max_reduction.get())),
                 ),
+                bass_penalty_start_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_start.get())),
+                ),
+                bass_penalty_full_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_full.get())),
+                ),
+                sub_penalty_start_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_start.get())),
+                ),
+                sub_penalty_full_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
+                ),
                 peak_ceiling_dbfs=float(self.var_peak_ceiling.get()),
                 normalization_mode=normalize_normalization_mode(self.var_normalization_mode.get()),
                 limiter_engine=normalize_limiter_engine(self.var_limiter_engine.get()),
@@ -3097,6 +3171,8 @@ class App(WaveformMixin, ctk.CTk):
             self._format_dbtp(row.get("true_peak_dbtp")),
             self._format_dbtp(row.get("projected_true_peak_dbtp")),
             self._limiting_label(row),
+            self._format_db(row.get("bass_strength_db")),
+            self._format_db(row.get("sub_strength_db")),
             self._status_display(row),
             self._row_warnings_text(row),
         )

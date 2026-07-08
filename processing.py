@@ -55,7 +55,11 @@ except ImportError as exc:
     ) from exc
 
 from analysis import (
+    DEFAULT_BASS_PENALTY_FULL_DB,
+    DEFAULT_BASS_PENALTY_START_DB,
     DEFAULT_OUTPUT_FORMAT_MODE,
+    DEFAULT_SUB_PENALTY_FULL_DB,
+    DEFAULT_SUB_PENALTY_START_DB,
     EFFECTIVE_ZERO_GAIN_DB,
     OUTPUT_FORMAT_ALL_TO_AIFF,
     OUTPUT_FORMAT_PRESERVE,
@@ -3352,6 +3356,10 @@ def process_track(
     output_root: str | None = None,
     source_root: str | None = None,
     limiter_engine: str = DEFAULT_LIMITER_ENGINE,
+    bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
+    bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
+    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
+    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
 ) -> tuple[TrackRow | None, str, dict[str, object] | None]:
     """Analyze one track, optionally render it, and return row, error, source info.
 
@@ -3382,6 +3390,10 @@ def process_track(
             max_reduction_db=max_reduction,
             peak_ceiling_dbfs=peak_ceiling,
             bass_max_reduction_db=bass_max_reduction,
+            bass_penalty_start_db=bass_penalty_start_db,
+            bass_penalty_full_db=bass_penalty_full_db,
+            sub_penalty_start_db=sub_penalty_start_db,
+            sub_penalty_full_db=sub_penalty_full_db,
             normalization_mode=normalization_mode,
             source_info=resolved_source_info,
             output_format_mode=output_format_mode,

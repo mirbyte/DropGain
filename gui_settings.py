@@ -14,10 +14,12 @@ from analysis import (
     MAX_ANALYSIS_WORKER_THREADS,
     MAX_LOUD_SECTION_WINDOW_SECONDS,
     MAX_BASS_MAX_BOOST_REDUCTION_DB,
+    MAX_BASS_PENALTY_THRESHOLD_DB,
     MIN_LOUD_SECTION_HOP_SECONDS,
     MIN_ANALYSIS_WORKER_THREADS,
     MIN_LOUD_SECTION_WINDOW_SECONDS,
     MIN_BASS_MAX_BOOST_REDUCTION_DB,
+    MIN_BASS_PENALTY_THRESHOLD_DB,
     LIMITER_ENGINE_CHOICES,
     MP3_MIN_ABS_GAIN_DB,
     NORMALIZATION_MODE_CHOICES,
@@ -700,7 +702,67 @@ class PreferencesPage(ctk.CTkFrame):
             padx=(0, 0),
             tooltip=(
                 "Maximum bass-aware gain trim on bass-heavy tracks. "
-                "Reduces boosts and deepens cuts slightly. Set to 0 to disable."
+                "Reduces boosts, deepens cuts, or pulls down an otherwise in-target track slightly. "
+                "Set to 0 to disable."
+            ),
+        )
+
+        lbl_bass_trim_thresholds = self.app._label(
+            grid,
+            text="When to trim bass-heavy tracks",
+            color=FG_MUTED,
+            bg=BG_CARD,
+            size=SETTINGS_TEXT,
+        )
+        lbl_bass_trim_thresholds.grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 6))
+        self.app._add_tooltip(
+            lbl_bass_trim_thresholds,
+            (
+                "DropGain measures how strong the low end is on each track's loudest section, "
+                "compared to the mids (115-1000 Hz). See bass_strength_db and sub_strength_db in the results table. "
+                "Bass-heavy tracks can feel louder than the LUFS meter suggests, so gain is pulled back slightly: "
+                "less boost, a deeper cut, or a small pulldown even on a track that's already in the target LUFS "
+                "band. These four values set when that pullback starts and when it reaches full strength. "
+                "Max bass-aware trim sets how strong the pullback can get."
+            ),
+            wraplength=420,
+        )
+
+        self._labeled_number(
+            grid, 4, 0, "Bass trim start", self.app.var_bass_penalty_start,
+            MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
+            tooltip=(
+                "How bass-heavy (45-115 Hz) a track must be before any bass-aware trim applies. "
+                "Below this value: no change. Example at default +5 dB: bass strength +4 dB is left alone; "
+                "+7 dB starts getting a small trim. Raise this if normal EDM bass keeps getting trimmed."
+            ),
+        )
+        self._labeled_number(
+            grid, 4, 1, "Bass trim full", self.app.var_bass_penalty_full,
+            MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
+            padx=(0, 0),
+            tooltip=(
+                "How bass-heavy a track must be before bass-aware trim reaches Max bass-aware trim. "
+                "Between Start and Full, trim grows smoothly. Example at defaults +5 / +17 dB: "
+                "bass strength +11 dB gets about half the max trim. Lower Full to react sooner on "
+                "moderately bass-heavy tracks."
+            ),
+        )
+        self._labeled_number(
+            grid, 5, 0, "Sub trim start", self.app.var_sub_penalty_start,
+            MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
+            tooltip=(
+                "Same as Bass trim start, but for sub-bass (20-45 Hz). Sub is usually weaker than mids, "
+                "so this defaults higher than bass start. Below this value: sub contributes no trim."
+            ),
+        )
+        self._labeled_number(
+            grid, 5, 1, "Sub trim full", self.app.var_sub_penalty_full,
+            MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
+            padx=(0, 0),
+            tooltip=(
+                "Same as Bass trim full, but for sub-bass. Bass and sub are checked separately; "
+                "whichever asks for more trim wins."
             ),
         )
 
@@ -715,7 +777,7 @@ class PreferencesPage(ctk.CTkFrame):
             checkmark_color=BUTTON_TEXT_DARK,
             font=self.app._font(SETTINGS_TEXT),
         )
-        self.chk_apply_render_gain_threshold.grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        self.chk_apply_render_gain_threshold.grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
         self.app._add_tooltip(
             self.chk_apply_render_gain_threshold,
             "Off by default for batch runs: render every track that passes safety checks. "
@@ -735,7 +797,7 @@ class PreferencesPage(ctk.CTkFrame):
             checkbox_height=18,
             font=self.app._font(SETTINGS_TEXT),
         )
-        self.chk_allow_risky_true_peak_boost.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.chk_allow_risky_true_peak_boost.grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.app._add_tooltip(
             self.chk_allow_risky_true_peak_boost,
             "Only use this when you trust the source file and accept the clipping risk.",

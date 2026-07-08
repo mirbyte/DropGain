@@ -22,8 +22,12 @@ from analysis import (
     APP_TITLE,
     CSV_FIELDNAMES,
     DEFAULT_APPLY_RENDER_GAIN_THRESHOLD,
+    DEFAULT_BASS_PENALTY_FULL_DB,
+    DEFAULT_BASS_PENALTY_START_DB,
     DEFAULT_LIMITER_ENGINE,
     DEFAULT_OUTPUT_FORMAT_MODE,
+    DEFAULT_SUB_PENALTY_FULL_DB,
+    DEFAULT_SUB_PENALTY_START_DB,
     PROCESSED_SUFFIX,
     TrackRow,
     apply_track_decision,
@@ -141,6 +145,10 @@ class DropGainSettings:
     allow_risky_true_peak_boost: bool = False
     apply_render_gain_threshold: bool = DEFAULT_APPLY_RENDER_GAIN_THRESHOLD
     output_root: str | None = None
+    bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB
+    bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB
+    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB
+    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB
 
 
 class CsvBatchWriter:
@@ -271,6 +279,10 @@ def recompute_row_decision(
         peak_ceiling_dbfs=settings.peak_ceiling_dbfs,
         normalization_mode=settings.normalization_mode,
         bass_max_reduction_db=settings.bass_max_reduction_db,
+        bass_penalty_start_db=settings.bass_penalty_start_db,
+        bass_penalty_full_db=settings.bass_penalty_full_db,
+        sub_penalty_start_db=settings.sub_penalty_start_db,
+        sub_penalty_full_db=settings.sub_penalty_full_db,
         allow_risky_true_peak_boost=settings.allow_risky_true_peak_boost,
     )
     apply_track_decision(row, decision, limiter_engine=settings.limiter_engine)
@@ -444,6 +456,10 @@ def run_analysis_job(
                 hop_seconds=settings.hop_seconds,
                 max_reduction=settings.max_reduction_db,
                 bass_max_reduction=settings.bass_max_reduction_db,
+                bass_penalty_start_db=settings.bass_penalty_start_db,
+                bass_penalty_full_db=settings.bass_penalty_full_db,
+                sub_penalty_start_db=settings.sub_penalty_start_db,
+                sub_penalty_full_db=settings.sub_penalty_full_db,
                 peak_ceiling=settings.peak_ceiling_dbfs,
                 normalization_mode=settings.normalization_mode,
                 analyze_only=True,

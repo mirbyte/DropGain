@@ -43,7 +43,7 @@ On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs 
 - **Library analysis** - recursive scan; programme and section LUFS, dBTP, sample peak, suggested gain, projections, and processing action per row
 - **Section-based targeting** - loudest sliding window (default 20 s / 5 s hop); true-peak ceiling wins over LUFS when they conflict
 - **Clean gain or limiter-assisted** - linear gain when the ceiling allows; a limiter engine (FabFilter Pro-L 2 or LoudMax) with `max_reduction` cap when peak control is needed
-- **Bass-aware trim** - low-band energy can reduce boost on bass-heavy sections
+- **Bass-aware trim** - on bass-heavy sections, low-band energy can reduce a boost or deepen a cut slightly
 - **`_DG` outputs** - copies beside sources or under a separate root; preserve format, force AIFF/MP3, or decode MP3 to AIFF to avoid double lossy encode
 - **Library Tuning** - profile the library; recommend targets, window/hop, thresholds, and ceiling
 - **Verification** - post-render re-measurement; loudness-normalization tags stripped; optional CSV (`dropgain_report.csv`) and session log
@@ -119,12 +119,12 @@ dBTP via native-rate decode, 4× polyphase oversampling, and peak detection on t
 Failed true-peak measurement blocks positive gain and flags manual review (overridable via **allow risky true-peak boost**).
 
 **Spectral band strength**  
-FFT band energy on the reference section only, relative to 150–1000 Hz:
+FFT band energy on the reference section only, relative to 115–1000 Hz:
 
-- 45–150 Hz (bass)
+- 45–115 Hz (bass)
 - 20–45 Hz (sub)
 
-Band strength affects bass-aware gain trim only, not section selection.
+Band strength affects bass-aware gain trim only, not section selection. Reported per track as `bass_strength_db` / `sub_strength_db` (results table and CSV).
 
 ### Gain decision
 
@@ -147,7 +147,7 @@ Mode-dependent peak for initial ceiling evaluation:
 If `peak_reference + gain` exceeds the dBTP ceiling, gain is clamped. No limiter is modeled.
 
 **4. Bass-aware trim**
-Ramp from band-strength thresholds (bass: +3 to +12 dB relative strength, max 0.6 dB gain reduction; sub: analogous curve). Attenuation suggestions are unchanged.
+Ramp from band-strength thresholds: bass and sub each have a start/full dB pair (defaults +5/+17 dB for bass, +8/+17 dB for sub) mapped linearly to a trim magnitude, capped by `bass_max_reduction` (default 0.8 dB). All four thresholds and the cap are user-configurable in Preferences (Render Rules). Trim applies independently of the LUFS-driven gain move: a positive gain suggestion is reduced, a negative one is deepened, and a track already in the target LUFS band (no gain move otherwise) gets a small standalone cut instead.
 
 **5. MP3 encode allowance**  
 Re-encoded MP3 outputs (non-preserve mode) add +0.8 dB to true-peak projections for encoder inter-sample peak lift. Preserve-format MP3→MP3 omits this allowance.

@@ -118,7 +118,7 @@ DEFAULT_TARGET_HIGH_LUFS = -7.5
 
 DEFAULT_MAX_REDUCTION_DB = 3.0
 
-DEFAULT_BASS_MAX_BOOST_REDUCTION_DB = 0.60
+DEFAULT_BASS_MAX_BOOST_REDUCTION_DB = 0.80
 MIN_BASS_MAX_BOOST_REDUCTION_DB = 0.0
 MAX_BASS_MAX_BOOST_REDUCTION_DB = 3.0
 
@@ -208,17 +208,20 @@ POST_VERIFY_LUFS_TOLERANCE = 0.40
 POST_VERIFY_PEAK_TOLERANCE_DB = 0.20
 
 BASS_ANALYSIS_LOW_HZ = 45.0
-BASS_ANALYSIS_HIGH_HZ = 150.0
-BASS_REFERENCE_LOW_HZ = 150.0
+BASS_ANALYSIS_HIGH_HZ = 115.0
+BASS_REFERENCE_LOW_HZ = 115.0
 BASS_REFERENCE_HIGH_HZ = 1000.0
-BASS_PENALTY_START_DB = 3.0
-BASS_PENALTY_FULL_DB = 12.0
+DEFAULT_BASS_PENALTY_START_DB = 5.0
+DEFAULT_BASS_PENALTY_FULL_DB = 17.0
 BASS_ANALYSIS_FFT_SIZE = 16_384
 
 SUB_ANALYSIS_LOW_HZ = 20.0
 SUB_ANALYSIS_HIGH_HZ = 45.0
-SUB_PENALTY_START_DB = 6.0
-SUB_PENALTY_FULL_DB = 15.0
+DEFAULT_SUB_PENALTY_START_DB = 8.0
+DEFAULT_SUB_PENALTY_FULL_DB = 17.0
+
+MIN_BASS_PENALTY_THRESHOLD_DB = 0.0
+MAX_BASS_PENALTY_THRESHOLD_DB = 30.0
 
 TrackRowValue: TypeAlias = str | int | float
 TrackRowNumber: TypeAlias = float | str
@@ -1429,7 +1432,7 @@ def measure_bass_strength_db(
     start_sec: float,
     end_sec: float,
 ) -> float:
-    """Return 45-150 Hz strength relative to the low-mid reference band."""
+    """Return 45-115 Hz strength relative to the low-mid reference band."""
     return measure_relative_band_strength_db(
         audio=audio,
         sample_rate=sample_rate,
@@ -1460,32 +1463,36 @@ def measure_sub_strength_db(
 def bass_aware_gain_trim_db(
     bass_strength_db: float | None,
     sub_strength_db: float | None,
-    suggested_gain_db: float,
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
+    bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
+    bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
+    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
+    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
 ) -> float:
-    """Return a mild low-end trim magnitude applied against the suggested gain direction."""
+    """Return a mild low-end trim magnitude from measured bass/sub strength.
+
+    Independent of any suggested gain: a bass-heavy loudest section can feel
+    louder than LUFS reports even when the track is already in the target
+    band, so this trim is applied on its own rather than only reshaping an
+    existing boost/cut.
+    """
     max_reduction = max(0.0, float(bass_max_reduction_db))
     if max_reduction <= 0.01:
         return 0.0
 
-    gain = float(suggested_gain_db)
-    if abs(gain) <= 0.01:
-        return 0.0
-
     bass_reduction = boost_reduction_for_strength(
         bass_strength_db,
-        BASS_PENALTY_START_DB,
-        BASS_PENALTY_FULL_DB,
+        bass_penalty_start_db,
+        bass_penalty_full_db,
         max_reduction,
     )
     sub_reduction = boost_reduction_for_strength(
         sub_strength_db,
-        SUB_PENALTY_START_DB,
-        SUB_PENALTY_FULL_DB,
+        sub_penalty_start_db,
+        sub_penalty_full_db,
         max_reduction,
     )
-    reduction = max(bass_reduction, sub_reduction)
-    return min(abs(gain), reduction)
+    return max(bass_reduction, sub_reduction)
 
 
 def mark_bass_aware_action(action: str) -> str:
@@ -1672,6 +1679,10 @@ def decide_from_measurements(
     peak_ceiling_dbfs: float,
     normalization_mode: str,
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
+    bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
+    bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
+    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
+    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
     allow_risky_true_peak_boost: bool = False,
     true_peak_measurements_present: bool = True,
 ) -> TrackDecision:
@@ -1713,12 +1724,15 @@ def decide_from_measurements(
     bass_adjustment = bass_aware_gain_trim_db(
         bass_strength,
         sub_strength,
-        suggested_gain,
         bass_max_reduction_db=bass_max_reduction_db,
+        bass_penalty_start_db=bass_penalty_start_db,
+        bass_penalty_full_db=bass_penalty_full_db,
+        sub_penalty_start_db=sub_penalty_start_db,
+        sub_penalty_full_db=sub_penalty_full_db,
     )
     if bass_adjustment > 0.01:
         if suggested_gain > 0.01:
-            suggested_gain -= bass_adjustment
+            suggested_gain -= min(suggested_gain, bass_adjustment)
             action = mark_bass_aware_action(action)
             decision_notes = append_note(
                 decision_notes,
@@ -1730,6 +1744,13 @@ def decide_from_measurements(
             decision_notes = append_note(
                 decision_notes,
                 f"bass-aware cut increased by {bass_adjustment:.2f} dB",
+            )
+        else:
+            suggested_gain = -bass_adjustment
+            action = mark_bass_aware_action("lower")
+            decision_notes = append_note(
+                decision_notes,
+                f"bass-aware trim applied to in-target track: {bass_adjustment:.2f} dB",
             )
         if abs(suggested_gain) < 0.01:
             suggested_gain = 0.0
@@ -1854,6 +1875,10 @@ def decision_from_row(
     peak_ceiling_dbfs: float,
     normalization_mode: str,
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
+    bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
+    bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
+    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
+    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
     allow_risky_true_peak_boost: bool = False,
 ) -> TrackDecision:
     """Recompute decision fields for an existing analyzed row."""
@@ -1886,6 +1911,10 @@ def decision_from_row(
         peak_ceiling_dbfs=peak_ceiling_dbfs,
         normalization_mode=normalization_mode,
         bass_max_reduction_db=bass_max_reduction_db,
+        bass_penalty_start_db=bass_penalty_start_db,
+        bass_penalty_full_db=bass_penalty_full_db,
+        sub_penalty_start_db=sub_penalty_start_db,
+        sub_penalty_full_db=sub_penalty_full_db,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=not true_peak_unreliable,
     )
@@ -1900,6 +1929,10 @@ def analyze_file(
     max_reduction_db: float,
     peak_ceiling_dbfs: float,
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
+    bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
+    bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
+    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
+    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
     normalization_mode: str = DEFAULT_NORMALIZATION_MODE,
     output_root: str | None = None,
     source_root: str | None = None,
@@ -2020,6 +2053,10 @@ def analyze_file(
         peak_ceiling_dbfs=peak_ceiling_dbfs,
         normalization_mode=normalization_mode,
         bass_max_reduction_db=bass_max_reduction_db,
+        bass_penalty_start_db=bass_penalty_start_db,
+        bass_penalty_full_db=bass_penalty_full_db,
+        sub_penalty_start_db=sub_penalty_start_db,
+        sub_penalty_full_db=sub_penalty_full_db,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=bool(true_peak_measurements),
     )
