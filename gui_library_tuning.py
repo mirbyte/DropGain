@@ -23,6 +23,8 @@ from gui_theme import (
     LOG_BG,
     METRIC_BG,
     METRIC_CHIP_CORNER_RADIUS,
+    PROGRESS_BAR_CORNER_RADIUS,
+    PROGRESS_BAR_HEIGHT,
     TYPE_BODY,
     TYPE_CAPTION,
     TYPE_LABEL,
@@ -167,7 +169,8 @@ class LibraryTuningPage(ctk.CTkFrame):
             progress_color=ICE_FILL,
             border_color=BORDER_COLOR,
             border_width=1,
-            height=8,
+            height=PROGRESS_BAR_HEIGHT,
+            corner_radius=PROGRESS_BAR_CORNER_RADIUS,
         )
         app.progress_lt.grid(row=0, column=0, sticky="ew")
         app.progress_lt.set(0)

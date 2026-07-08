@@ -124,6 +124,8 @@ from gui_utils import (  # noqa: F401
 )
 
 GUI_TICK_MIN_INTERVAL_SEC = 0.35
+PROGRESS_TWEEN_INTERVAL_MS = 16
+PROGRESS_TWEEN_DURATION_SEC = 0.2
 SETTING_CHANGE_DEBOUNCE_MS = 200
 SAVE_SETTINGS_DEBOUNCE_MS = 500
 RESULTS_TABLE_RESIZE_DEBOUNCE_MS = 50
@@ -193,6 +195,10 @@ class App(WaveformMixin, ctk.CTk):
         self._operation_last_rate = 0.0
         self._operation_last_eta = ""
         self._operation_last_errors = 0
+        self._progress_target = 0.0
+        self._progress_display = 0.0
+        self._progress_tween_after_id: str | None = None
+        self._progress_indeterminate = False
         self._building_ui = True
         self._suspend_setting_traces = False
         self._analysis_setting_after_id: str | None = None
@@ -1672,6 +1678,80 @@ class App(WaveformMixin, ctk.CTk):
         done = min(self._progress_done, total)
         return done / total
 
+    def _progress_bars(self) -> list[ctk.CTkProgressBar]:
+        bars: list[ctk.CTkProgressBar] = []
+        if hasattr(self, "progress"):
+            bars.append(self.progress)
+        if hasattr(self, "progress_lt"):
+            bars.append(self.progress_lt)
+        return bars
+
+    def _cancel_progress_tween(self) -> None:
+        if self._progress_tween_after_id is None:
+            return
+        try:
+            self.after_cancel(self._progress_tween_after_id)
+        except tk.TclError:
+            pass
+        self._progress_tween_after_id = None
+
+    def _set_progress_indeterminate(self, active: bool) -> None:
+        if active == self._progress_indeterminate:
+            return
+        self._cancel_progress_tween()
+        self._progress_indeterminate = active
+        for bar in self._progress_bars():
+            if active:
+                bar.stop()
+                bar.configure(mode="indeterminate")
+                bar.start()
+            else:
+                bar.stop()
+                bar.configure(mode="determinate")
+                bar.set(self._progress_display)
+
+    def _apply_progress_bar_values(self, fraction: float) -> None:
+        fraction = max(0.0, min(1.0, fraction))
+        self._progress_display = fraction
+        if self._progress_indeterminate:
+            return
+        for bar in self._progress_bars():
+            bar.set(fraction)
+
+    def _set_progress_bars(self, fraction: float, *, immediate: bool = False) -> None:
+        if self._progress_indeterminate:
+            self._set_progress_indeterminate(False)
+        self._progress_target = max(0.0, min(1.0, fraction))
+        if immediate or abs(self._progress_target - self._progress_display) < 1e-6:
+            self._cancel_progress_tween()
+            self._apply_progress_bar_values(self._progress_target)
+            return
+        self._schedule_progress_tween()
+
+    def _schedule_progress_tween(self) -> None:
+        if self._progress_tween_after_id is not None:
+            return
+        self._progress_tween_step()
+
+    def _progress_tween_step(self) -> None:
+        self._progress_tween_after_id = None
+        if self._progress_indeterminate:
+            return
+        delta = self._progress_target - self._progress_display
+        if abs(delta) < 0.001:
+            self._apply_progress_bar_values(self._progress_target)
+            return
+        alpha = min(
+            1.0,
+            PROGRESS_TWEEN_INTERVAL_MS / (PROGRESS_TWEEN_DURATION_SEC * 1000.0),
+        )
+        self._apply_progress_bar_values(self._progress_display + delta * alpha)
+        if abs(self._progress_target - self._progress_display) >= 0.001:
+            self._progress_tween_after_id = self.after(
+                PROGRESS_TWEEN_INTERVAL_MS,
+                self._progress_tween_step,
+            )
+
     def _operation_phase_label(self) -> str:
         if self._active_phase == "idle":
             return "Done" if self._run_completed else "Ready"
@@ -1817,10 +1897,9 @@ class App(WaveformMixin, ctk.CTk):
             self.var_status.set(self._operation_stats_text(rate, eta, errors))
         self._refresh_results_empty_message()
 
-        fraction = self._operation_progress_fraction()
-        self.progress.set(fraction)
-        if hasattr(self, "progress_lt"):
-            self.progress_lt.set(fraction)
+        if self._active_phase != "preflight":
+            fraction = self._operation_progress_fraction()
+            self._set_progress_bars(fraction)
 
         fraction_text = self._operation_fraction_text()
         if fraction_text:
@@ -1843,12 +1922,12 @@ class App(WaveformMixin, ctk.CTk):
         self._operation_last_errors = 0
         self._cancel_operation_elapsed_refresh()
         self._restore_busy_button_label()
+        self._cancel_progress_tween()
+        self._set_progress_indeterminate(False)
         if hasattr(self, "var_operation_phase"):
             self.var_operation_phase.set(self._operation_phase_label())
             self.var_operation_fraction.set("")
-        self.progress.set(0)
-        if hasattr(self, "progress_lt"):
-            self.progress_lt.set(0)
+        self._set_progress_bars(0.0, immediate=True)
         self._update_metric_phase_highlight()
         self.title(APP_TITLE)
         self._refresh_results_empty_message()
@@ -1875,14 +1954,16 @@ class App(WaveformMixin, ctk.CTk):
             self.var_operation_phase.set("Preparing")
             self.var_operation_fraction.set("")
         self.var_status.set(initial_status)
-        self.progress.set(0)
-        if hasattr(self, "progress_lt"):
-            self.progress_lt.set(0)
+        self._set_progress_bars(0.0, immediate=True)
+        self._set_progress_indeterminate(True)
         self._refresh_results_empty_message()
         self._schedule_operation_elapsed_refresh()
 
     def _set_active_phase(self, phase: str) -> None:
+        leaving_preflight = self._active_phase == "preflight" and phase != "preflight"
         self._active_phase = phase
+        if leaving_preflight:
+            self._set_progress_indeterminate(False)
         self._update_metric_phase_highlight()
         self._update_busy_button_label()
         if hasattr(self, "var_operation_phase"):
@@ -1920,23 +2001,20 @@ class App(WaveformMixin, ctk.CTk):
         self._refresh_operation_display(float(rate), str(eta), int(errors))
 
     def _set_progress_max(self, maximum: int) -> None:
+        self._set_progress_indeterminate(False)
         self._progress_total = max(int(maximum), 1)
         self._progress_max = self._progress_total
         self._progress_done = 0
         preserve_bar = self._active_pipeline == "batch" and self._active_phase == "render"
         fraction = self._operation_progress_fraction() if preserve_bar else 0.0
-        self.progress.set(fraction)
-        if hasattr(self, "progress_lt"):
-            self.progress_lt.set(fraction)
+        self._set_progress_bars(fraction, immediate=preserve_bar or fraction == 0.0)
         if hasattr(self, "var_operation_fraction"):
             self.var_operation_fraction.set(self._operation_fraction_text())
 
     def _set_progress_value(self, value: int) -> None:
         self._progress_done = int(value)
         fraction = self._operation_progress_fraction()
-        self.progress.set(fraction)
-        if hasattr(self, "progress_lt"):
-            self.progress_lt.set(fraction)
+        self._set_progress_bars(fraction)
 
     # ---------------------------------------------------------------------
     # User actions

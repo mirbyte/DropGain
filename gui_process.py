@@ -41,6 +41,8 @@ from gui_theme import (
     BUTTON_HEIGHT,
     PROCESS_ACTION_COLUMN_WIDTH,
     PROCESS_DASHBOARD_PROGRESS_GAP,
+    PROGRESS_BAR_CORNER_RADIUS,
+    PROGRESS_BAR_HEIGHT,
     PROCESS_SETTINGS_ROW_PADY,
     PROCESS_SETTINGS_WRAP_WIDTH,
     RESULTS_TABLE_COLUMNS,
@@ -493,7 +495,8 @@ class ProcessPage(ctk.CTkFrame):
             progress_color=ICE_FILL,
             border_color=BORDER_COLOR,
             border_width=1,
-            height=10,
+            height=PROGRESS_BAR_HEIGHT,
+            corner_radius=PROGRESS_BAR_CORNER_RADIUS,
         )
         app.progress.grid(row=1, column=0, sticky="ew")
         app.progress.set(0)
