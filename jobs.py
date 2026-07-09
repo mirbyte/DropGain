@@ -370,6 +370,7 @@ def run_analysis_job(
     the render setting here so the analysis table matches the later render pass.
     """
     started_at = time.time()
+    source_folder_name = os.path.basename(os.path.normpath(settings.folder))
     empty_counts = {
         "processed": 0,
         "would_process": 0,
@@ -470,6 +471,7 @@ def run_analysis_job(
                 apply_gain_threshold=apply_gain_threshold,
                 output_root=settings.output_root,
                 source_root=settings.folder,
+                source_folder_name=source_folder_name,
                 limiter_engine=settings.limiter_engine,
             )
 
@@ -481,6 +483,7 @@ def run_analysis_job(
                         path,
                         error_msg,
                         source_root=settings.folder,
+                        source_folder_name=source_folder_name,
                         output_format_mode=settings.output_format_mode,
                     )
                     if row is not None:
@@ -525,6 +528,7 @@ def run_analysis_job(
                         path,
                         "analysis returned no row",
                         source_root=settings.folder,
+                        source_folder_name=source_folder_name,
                         output_format_mode=settings.output_format_mode,
                     )
                     all_rows.append(error_row)
@@ -613,6 +617,7 @@ def run_analysis_job(
                     path,
                     str(exc),
                     source_root=settings.folder,
+                    source_folder_name=source_folder_name,
                     output_format_mode=settings.output_format_mode,
                 )
                 all_rows.append(error_row)

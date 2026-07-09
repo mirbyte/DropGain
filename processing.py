@@ -3355,6 +3355,7 @@ def process_track(
     apply_gain_threshold: bool = True,
     output_root: str | None = None,
     source_root: str | None = None,
+    source_folder_name: str = "",
     limiter_engine: str = DEFAULT_LIMITER_ENGINE,
     bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
@@ -3400,6 +3401,7 @@ def process_track(
             allow_risky_true_peak_boost=allow_risky_true_peak_boost,
             output_root=output_root,
             source_root=source_root,
+            source_folder_name=source_folder_name,
             limiter_engine=limiter_engine,
         )
 

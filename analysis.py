@@ -230,6 +230,7 @@ TrackRowKey: TypeAlias = Literal[
     "path",
     "output_path",
     "filename",
+    "source_folder_name",
     "extension",
     "output_format_mode",
     "duration_sec",
@@ -296,6 +297,7 @@ class TrackRow(TypedDict):
     path: str
     output_path: str
     filename: str
+    source_folder_name: str
     extension: str
     output_format_mode: str
     duration_sec: TrackRowNumber
@@ -360,6 +362,7 @@ CSV_FIELDNAMES: tuple[TrackRowKey, ...] = (
     "path",
     "output_path",
     "filename",
+    "source_folder_name",
     "extension",
     "output_format_mode",
     "duration_sec",
@@ -437,9 +440,18 @@ def script_folder() -> Path:
     return Path(__file__).resolve().parent
 
 
-def default_csv_path() -> str:
-    """Return the default path for the CSV report next to the executable/script."""
-    return str(script_folder() / DEFAULT_OUTPUT_CSV_NAME)
+def default_csv_path(folder: str | None = None) -> str:
+    """Return the default path for the CSV report next to the executable/script.
+
+    When a source folder is provided, the folder name is appended to the report
+    filename so reports from different libraries are easy to distinguish.
+    """
+    path = script_folder() / DEFAULT_OUTPUT_CSV_NAME
+    if folder:
+        folder_name = os.path.basename(os.path.normpath(folder))
+        if folder_name:
+            path = path.with_name(f"{path.stem}_{folder_name}{path.suffix}")
+    return str(path)
 
 
 def normalize_output_format_mode(value: object) -> str:
@@ -577,6 +589,7 @@ def make_error_track_row(
     error_message: str,
     *,
     source_root: str | None = None,
+    source_folder_name: str = "",
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
 ) -> TrackRow:
     """Build a minimal TrackRow for a file that failed before analysis completed."""
@@ -592,6 +605,7 @@ def make_error_track_row(
                 output_format_mode=output_format_mode,
             ),
             "filename": source_path.name,
+            "source_folder_name": source_folder_name,
             "extension": ext,
             "output_format_mode": normalize_output_format_mode(output_format_mode),
             "processing_status": "error",
@@ -1936,6 +1950,7 @@ def analyze_file(
     normalization_mode: str = DEFAULT_NORMALIZATION_MODE,
     output_root: str | None = None,
     source_root: str | None = None,
+    source_folder_name: str = "",
     source_info: dict[str, object] | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
     allow_risky_true_peak_boost: bool = False,
@@ -2075,6 +2090,7 @@ def analyze_file(
             output_format_mode=output_format_mode,
         ),
         "filename": os.path.basename(path),
+        "source_folder_name": source_folder_name,
         "extension": ext,
         "output_format_mode": output_format_mode,
         "duration_sec": round_or_blank(duration, 1),

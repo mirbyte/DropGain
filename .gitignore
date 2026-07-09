@@ -46,8 +46,7 @@ desktop.ini
 # DropGain runtime / user data
 dropgain_settings.json
 drop_lufs_settings.json
-dropgain.log
-dropgain_report.csv
+*.csv
 *.log
 
 # Local assets / test material

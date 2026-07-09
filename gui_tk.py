@@ -264,7 +264,7 @@ class App(WaveformMixin, ctk.CTk):
         if START_MAXIMIZED:
             self.after(0, self._maximize_window)
 
-        if os.path.exists(default_csv_path()):
+        if os.path.exists(default_csv_path(self.var_folder.get().strip())):
             self._apply_action_button_state(self.btn_open_csv, "normal")
 
         self._logger.info("Logging to %s", script_folder() / LOG_FILE_NAME)
@@ -1218,7 +1218,7 @@ class App(WaveformMixin, ctk.CTk):
         settings = self._settings
         self.var_folder = tk.StringVar(value=str(settings.get("last_folder") or ""))
         self.var_output_folder = tk.StringVar(value=str(settings.get("last_output_folder") or ""))
-        self.var_csv = tk.StringVar(value=default_csv_path())
+        self.var_csv = tk.StringVar(value=default_csv_path(self.var_folder.get().strip()))
         self.var_write_csv = tk.BooleanVar(value=self._setting_bool(settings, "write_csv", True))
         self.var_window = tk.DoubleVar(value=self._setting_float(settings, "window_seconds", DEFAULT_LOUD_SECTION_WINDOW_SECONDS))
         self.var_hop = tk.DoubleVar(value=self._setting_float(settings, "hop_seconds", DEFAULT_LOUD_SECTION_HOP_SECONDS))
@@ -2336,7 +2336,7 @@ class App(WaveformMixin, ctk.CTk):
         if not folder:
             return
         self.var_folder.set(folder)
-        self.var_csv.set(default_csv_path())
+        self.var_csv.set(default_csv_path(folder))
         self._flush_pending_settings_save()
 
     def _pick_output_folder(self) -> None:
@@ -2440,7 +2440,7 @@ class App(WaveformMixin, ctk.CTk):
             add("source folder", False, "not selected")
 
         try:
-            csv_dir = os.path.dirname(os.path.abspath(default_csv_path())) or os.getcwd()
+            csv_dir = os.path.dirname(os.path.abspath(default_csv_path(self.var_folder.get().strip()))) or os.getcwd()
             os.makedirs(csv_dir, exist_ok=True)
             test_path = os.path.join(csv_dir, ".dropgain_write_test")
             with open(test_path, "w", encoding="utf-8") as handle:
@@ -2505,7 +2505,7 @@ class App(WaveformMixin, ctk.CTk):
             return
 
         folder = self.var_folder.get().strip()
-        csv_path = default_csv_path()
+        csv_path = default_csv_path(folder)
         self.var_csv.set(csv_path)
 
         if not folder or not os.path.isdir(folder):
@@ -3111,7 +3111,7 @@ class App(WaveformMixin, ctk.CTk):
             )
             return DropGainSettings(
                 folder=folder,
-                csv_path=default_csv_path(),
+                csv_path=self.var_csv.get().strip(),
                 target_low_lufs=float(self.var_target_low.get()),
                 target_high_lufs=float(self.var_target_high.get()),
                 window_seconds=max(1.0, float(self.var_window.get())),

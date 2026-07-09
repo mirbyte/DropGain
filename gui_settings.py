@@ -856,7 +856,7 @@ class PreferencesPage(ctk.CTkFrame):
         self.csv_display.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         self.app._label(
             csv_cell,
-            text=f"Default path: {default_csv_path()}",
+            text=f"Default path: {default_csv_path(self.app.var_folder.get().strip())}",
             color=FG_MUTED,
             bg=BG_CARD,
             size=SETTINGS_HINT,
