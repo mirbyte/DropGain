@@ -36,7 +36,7 @@ If you work with long material:
 
 ### Throughput (author's machine)
 
-On a Ryzen 7 with **Analysis workers** set to **4**, full analyze + render runs have averaged around **430 tracks/hour** (typical EDM-length material, Pro-L2  limiter-assisted mode). I would not go above 2 workers on that CPU even though it has 8 cores. Your numbers will vary with CPU, disk, track length, how many tracks need limiting vs clean gain, and output format.
+On a Ryzen 7 with Analysis workers set to 4, full analyze + render runs have averaged around 430 tracks/hour (typical EDM-length material, Pro-L2  limiter-assisted mode). I would not go above 2 workers on that CPU even though it has 8 cores. Your numbers will vary with CPU, disk, track length, how many tracks need limiting vs clean gain, and output format.
 
 ## What it does
 
