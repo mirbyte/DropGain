@@ -847,7 +847,9 @@ def run_processing_job(
     )
     on_progress("phase", "render")
     on_progress("progress_max", total)
-    on_progress("summary_counts", dict(empty_counts))
+    render_counts = dict(empty_counts)
+    render_counts["would_process"] = total
+    on_progress("summary_counts", render_counts)
 
     if total == 0:
         logger.info("Nothing to do.")
@@ -862,7 +864,7 @@ def run_processing_job(
 
     completed = 0
     errors = 0
-    run_counts = dict(empty_counts)
+    run_counts = dict(render_counts)
     write_lock = threading.Lock()
 
     def count_completed_row(row: TrackRow) -> None:
