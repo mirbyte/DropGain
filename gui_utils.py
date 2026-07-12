@@ -34,6 +34,14 @@ from gui_theme import (
 )
 
 
+def telemetry_caption(text: str) -> str:
+    """Prefix instrument-panel readouts with a console-style marker."""
+    stripped = text.strip()
+    if stripped.startswith("// "):
+        return stripped
+    return f"// {stripped}"
+
+
 def enable_windows_dpi_awareness() -> None:
     if os.name != "nt":
         return

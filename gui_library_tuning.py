@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageTk
 
+from gui_utils import telemetry_caption
 from gui_theme import (
     ACCENT,
     BG_FIELD,
@@ -109,11 +110,12 @@ class LibraryTuningPage(ctk.CTkFrame):
         settings_line.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         app._label(
             settings_line,
-            text="ACTIVE SETTINGS",
+            text=telemetry_caption("ACTIVE SETTINGS"),
             color=FG_MUTED,
             bg=BG_MAIN,
             size=TYPE_MICRO,
             weight="bold",
+            mono=True,
         ).pack(side="left", padx=(0, 12))
         app.lbl_lt_settings_summary = app._label(
             settings_line,
@@ -180,6 +182,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             color=FG_MUTED,
             bg=BG_MAIN,
             size=TYPE_CAPTION,
+            mono=True,
         ).grid(row=1, column=0, sticky="w", pady=(5, 0))
 
         self._metric_vars: dict[str, tk.StringVar] = {}

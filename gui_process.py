@@ -13,6 +13,7 @@ from tkinter import scrolledtext, ttk
 
 import customtkinter as ctk
 
+from gui_utils import telemetry_caption
 from gui_theme import (
     BG_FIELD,
     BG_MAIN,
@@ -31,7 +32,6 @@ from gui_theme import (
     METRIC_TILE_CORNER_RADIUS,
     METRIC_TILE_GAP,
     METRIC_TILE_HEIGHT,
-    METRIC_TILE_LABEL_SIZE,
     METRIC_TILE_VALUE_SIZE,
     METRIC_TILE_WIDTH,
     OUTPUT_CONTENT_HEIGHT,
@@ -48,10 +48,12 @@ from gui_theme import (
     RESULTS_TABLE_COLUMNS,
     SECTION_GAP,
     SELECTION_BG,
+    SIGNAL_PANEL_CORNER_RADIUS,
     SPACE_1,
     SPACE_2,
     SPACE_3,
     TYPE_BODY,
+    TYPE_CAPTION,
     TYPE_LABEL,
     TYPE_MICRO,
     WARN_FG,
@@ -277,14 +279,9 @@ class ProcessPage(ctk.CTkFrame):
         )
         folder_input_row = ctk.CTkFrame(folder_block, fg_color="transparent")
         folder_input_row.grid(row=1, column=0, sticky="w")
-        app.entry_folder = ctk.CTkEntry(
+        app.entry_folder = app._entry(
             folder_input_row,
             textvariable=app.var_folder,
-            fg_color=BG_FIELD,
-            border_color=BORDER_COLOR,
-            text_color=FG_MAIN,
-            font=app._font(TYPE_BODY),
-            height=34,
             width=folder_entry_width,
         )
         app.entry_folder.grid(row=0, column=0, sticky="w", padx=(0, 6))
@@ -301,14 +298,9 @@ class ProcessPage(ctk.CTkFrame):
         )
         output_input_row = ctk.CTkFrame(folder_block, fg_color="transparent")
         output_input_row.grid(row=3, column=0, sticky="w")
-        app.entry_output_folder = ctk.CTkEntry(
+        app.entry_output_folder = app._entry(
             output_input_row,
             textvariable=app.var_output_folder,
-            fg_color=BG_FIELD,
-            border_color=BORDER_COLOR,
-            text_color=FG_MAIN,
-            font=app._font(TYPE_BODY),
-            height=34,
             width=folder_entry_width,
         )
         app.entry_output_folder.grid(row=0, column=0, sticky="w", padx=(0, 6))
@@ -376,7 +368,8 @@ class ProcessPage(ctk.CTkFrame):
                 text=label,
                 color=FG_MUTED,
                 bg=METRIC_BG,
-                size=METRIC_TILE_LABEL_SIZE,
+                size=TYPE_CAPTION,
+                mono=True,
                 anchor="center",
             ).place(relx=0.5, rely=0.76, anchor="center")
             app._summary_chip_labels[chip_id] = value_label
@@ -389,11 +382,12 @@ class ProcessPage(ctk.CTkFrame):
         settings_line.pack(anchor="center")
         app._label(
             settings_line,
-            text="ACTIVE SETTINGS",
+            text=telemetry_caption("ACTIVE SETTINGS"),
             color=FG_MUTED,
             bg=BG_MAIN,
             size=TYPE_MICRO,
             weight="bold",
+            mono=True,
         ).pack(side="left", padx=(0, 12))
         app.lbl_process_settings_summary = app._label(
             settings_line,
@@ -469,7 +463,7 @@ class ProcessPage(ctk.CTkFrame):
         header_row.grid(row=0, column=0, sticky="ew", pady=(0, 3))
         header_row.grid_columnconfigure(0, weight=1)
 
-        app.var_operation_phase = tk.StringVar(value="Ready")
+        app.var_operation_phase = tk.StringVar(value=telemetry_caption("Ready"))
         app.var_operation_fraction = tk.StringVar(value="")
         app._label(
             header_row,
@@ -479,14 +473,16 @@ class ProcessPage(ctk.CTkFrame):
             size=TYPE_BODY,
             weight="bold",
             anchor="w",
+            mono=True,
         ).grid(row=0, column=0, sticky="w")
         app._label(
             header_row,
             textvariable=app.var_operation_fraction,
-            color=FG_MAIN,
+            color=FG_MUTED,
             bg=BG_MAIN,
             size=TYPE_BODY,
             anchor="e",
+            mono=True,
         ).grid(row=0, column=1, sticky="e")
 
         app.progress = ctk.CTkProgressBar(
@@ -501,7 +497,7 @@ class ProcessPage(ctk.CTkFrame):
         app.progress.grid(row=1, column=0, sticky="ew")
         app.progress.set(0)
 
-        app.var_status = tk.StringVar(value="Ready.")
+        app.var_status = tk.StringVar(value=telemetry_caption("Ready."))
 
         review_card = app._card(self, BG_PANEL, (CARD_PAD, CARD_PAD))
         review_card.grid(row=2, column=0, sticky="nsew", padx=PAGE_PADX, pady=(0, SECTION_GAP))
@@ -556,7 +552,7 @@ class ProcessPage(ctk.CTkFrame):
 
         output_header = ctk.CTkFrame(output, fg_color="transparent")
         output_header.grid(row=0, column=0, sticky="ew", pady=(0, 4))
-        output_header.grid_columnconfigure(0, weight=1)
+        output_header.grid_columnconfigure(1, weight=1)
 
         output_tab_buttons = ctk.CTkFrame(output_header, fg_color="transparent")
         output_tab_buttons.grid(row=0, column=0, sticky="w")
@@ -579,10 +575,34 @@ class ProcessPage(ctk.CTkFrame):
         app.btn_output_log.grid(row=0, column=1)
         app._register_tab_button(app.btn_output_log, active=False)
 
+        app.var_waveform_title = tk.StringVar(value="Select an analyzed track to preview its waveform.")
+        app.var_waveform_stats = tk.StringVar(value="")
+        app.output_track_info = ctk.CTkFrame(output_header, fg_color="transparent")
+        app.output_track_info.grid(row=0, column=1, sticky="e", padx=(SPACE_2, 0))
+        app.lbl_waveform_stats = app._label(
+            app.output_track_info,
+            textvariable=app.var_waveform_stats,
+            color=FG_MUTED,
+            bg=BG_PANEL,
+            size=TYPE_LABEL,
+        )
+        app.lbl_waveform_stats.pack(side="right")
+        app.lbl_waveform_title = app._label(
+            app.output_track_info,
+            textvariable=app.var_waveform_title,
+            bg=BG_PANEL,
+            size=TYPE_BODY,
+            weight="bold",
+            anchor="e",
+        )
+        app.lbl_waveform_title.pack(side="right", padx=(0, SPACE_2))
+
         app.output_content = ctk.CTkFrame(
             output,
             fg_color=LOG_BG,
-            corner_radius=6,
+            corner_radius=SIGNAL_PANEL_CORNER_RADIUS,
+            border_color=BORDER_COLOR,
+            border_width=1,
         )
         app.output_content.grid(row=1, column=0, sticky="ew")
         app.output_content.configure(height=OUTPUT_CONTENT_HEIGHT)
@@ -590,31 +610,14 @@ class ProcessPage(ctk.CTkFrame):
         app.output_content.grid_columnconfigure(0, weight=1)
         app.output_content.grid_rowconfigure(0, weight=1)
 
-        app.waveform_panel = ctk.CTkFrame(app.output_content, fg_color=LOG_BG, corner_radius=6)
+        app.waveform_panel = ctk.CTkFrame(
+            app.output_content,
+            fg_color=LOG_BG,
+            corner_radius=SIGNAL_PANEL_CORNER_RADIUS,
+        )
         app.waveform_panel.grid(row=0, column=0, sticky="nsew")
         app.waveform_panel.grid_columnconfigure(0, weight=1)
-        app.waveform_panel.grid_rowconfigure(1, weight=1)
-
-        app.var_waveform_title = tk.StringVar(value="Select an analyzed track to preview its waveform.")
-        app.var_waveform_stats = tk.StringVar(value="")
-        app.waveform_header = tk.Frame(app.waveform_panel, bg=LOG_BG, bd=0, highlightthickness=0)
-        app.waveform_header.grid(row=0, column=0, sticky="ew", padx=SPACE_2, pady=0)
-        lbl_waveform_title = app._label(
-            app.waveform_header,
-            textvariable=app.var_waveform_title,
-            bg=LOG_BG,
-            size=TYPE_BODY,
-            weight="bold",
-        )
-        lbl_waveform_title.pack(side="left")
-        lbl_waveform_stats = app._label(
-            app.waveform_header,
-            textvariable=app.var_waveform_stats,
-            color=FG_MUTED,
-            bg=LOG_BG,
-            size=TYPE_LABEL,
-        )
-        lbl_waveform_stats.pack(side="left", padx=(8, 0))
+        app.waveform_panel.grid_rowconfigure(0, weight=1)
 
         app.waveform_canvas = tk.Canvas(
             app.waveform_panel,
@@ -622,15 +625,19 @@ class ProcessPage(ctk.CTkFrame):
             highlightthickness=0,
             bd=0,
             relief="flat",
-            height=max(WAVEFORM_MIN_HEIGHT, OUTPUT_CONTENT_HEIGHT - 28),
+            height=max(WAVEFORM_MIN_HEIGHT, OUTPUT_CONTENT_HEIGHT),
         )
-        app.waveform_canvas.grid(row=1, column=0, sticky="nsew", padx=SPACE_2, pady=0)
+        app.waveform_canvas.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         app.waveform_canvas.bind("<Configure>", app._on_waveform_canvas_configure, add=True)
         app.waveform_canvas.bind("<Motion>", app._on_waveform_canvas_motion, add=True)
         app.waveform_canvas.bind("<Leave>", app._on_waveform_canvas_leave, add=True)
         app.waveform_display = app.waveform_canvas
 
-        app.log_panel = ctk.CTkFrame(app.output_content, fg_color=LOG_BG, corner_radius=6)
+        app.log_panel = ctk.CTkFrame(
+            app.output_content,
+            fg_color=LOG_BG,
+            corner_radius=SIGNAL_PANEL_CORNER_RADIUS,
+        )
         app.log_panel.grid(row=0, column=0, sticky="nsew")
         app.log_panel.grid_columnconfigure(0, weight=1)
         app.log_panel.grid_rowconfigure(0, weight=1)

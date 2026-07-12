@@ -13,7 +13,14 @@ import tkinter as tk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from analysis import hidden_subprocess_kwargs, is_limiter_processing_engine
+from gui_decor import (
+    draw_corner_brackets,
+    draw_inset_frame,
+    draw_scanlines,
+    draw_signal_grid,
+)
 from gui_theme import (
+    ACCENT,
     BG_CARD,
     BORDER_COLOR,
     BUTTON_TEXT_DARK,
@@ -22,6 +29,13 @@ from gui_theme import (
     ICE_SOFT,
     LOG_BG,
     OUTPUT_CONTENT_HEIGHT,
+    SIGNAL_BRACKET_ALPHA,
+    SIGNAL_FRAME_HIGHLIGHT,
+    SIGNAL_FRAME_SHADOW,
+    SIGNAL_GRID_ALPHA,
+    SIGNAL_GRID_SPACING,
+    SIGNAL_SCANLINE_ALPHA,
+    SIGNAL_SCANLINE_SPACING,
     WAVEFORM_BAND_LOW,
     WAVEFORM_BAND_OTHER,
     WAVEFORM_BG,
@@ -30,12 +44,10 @@ from gui_theme import (
     WAVEFORM_FONT_LABEL_BASE,
     WAVEFORM_FONT_MESSAGE_BASE,
     WAVEFORM_FONT_PILL_BASE,
-    WAVEFORM_FONT_SCALE_BASE,
     WAVEFORM_FONT_VALUE_BASE,
     WAVEFORM_GRID,
     WAVEFORM_LIMITER_ZONE,
     WAVEFORM_LOUDNESS_SMOOTH_SECONDS,
-    WAVEFORM_LUFS_SCALE_WIDTH,
     WAVEFORM_MARKER,
     WAVEFORM_MIN_HEIGHT,
     WAVEFORM_MIN_WIDTH,
@@ -45,6 +57,7 @@ from gui_theme import (
     WAVEFORM_SUPERSAMPLE,
     WAVEFORM_TARGET_BAND,
     WAVEFORM_TEXT_BADGE_ALPHA,
+    SPACE_1,
     SPACE_2,
 )
 from gui_utils import make_tooltip_label, position_tooltip_window, ui_scale_for
@@ -460,29 +473,10 @@ class WaveformMixin:
         width = int(canvas.winfo_width())
         height = int(canvas.winfo_height())
         if width < 64:
-            width = max(WAVEFORM_MIN_WIDTH, int(panel.winfo_width()) - 16)
+            width = max(WAVEFORM_MIN_WIDTH, int(panel.winfo_width()))
         if height < 48:
-            height = max(WAVEFORM_MIN_HEIGHT, OUTPUT_CONTENT_HEIGHT - 28)
+            height = max(WAVEFORM_MIN_HEIGHT, OUTPUT_CONTENT_HEIGHT)
         return max(WAVEFORM_MIN_WIDTH, width), max(WAVEFORM_MIN_HEIGHT, height)
-
-    def _waveform_plot_left_px(self, width: int | None = None) -> int:
-        if width is None:
-            width, _height = self._waveform_plot_size()
-        ui_scale = self._waveform_ui_scale()
-        lufs_scale_width = min(float(WAVEFORM_LUFS_SCALE_WIDTH) * ui_scale, float(width) * 0.28)
-        return int(round(lufs_scale_width))
-
-    def _sync_waveform_header_padding(self) -> None:
-        header = getattr(self, "waveform_header", None)
-        if header is None:
-            return
-        try:
-            if not header.winfo_exists():
-                return
-        except Exception:
-            return
-        side_pad = SPACE_2
-        header.grid_configure(padx=(side_pad + self._waveform_plot_left_px(), side_pad))
 
     def _waveform_ui_scale(self) -> float:
         try:
@@ -524,6 +518,37 @@ class WaveformMixin:
     def _draw_waveform_message_image(self, width: int, height: int, text: str) -> Image.Image:
         img = Image.new("RGBA", (width, height), self._hex_rgba(LOG_BG))
         draw = ImageDraw.Draw(img)
+        margin = 8.0
+        draw_signal_grid(
+            draw,
+            margin,
+            margin,
+            width - margin,
+            height - margin,
+            spacing=float(SIGNAL_GRID_SPACING),
+            color=ACCENT,
+            alpha=SIGNAL_GRID_ALPHA,
+        )
+        draw_scanlines(
+            draw,
+            margin,
+            margin,
+            width - margin,
+            height - margin,
+            spacing=float(SIGNAL_SCANLINE_SPACING),
+            alpha=SIGNAL_SCANLINE_ALPHA,
+        )
+        draw_corner_brackets(
+            draw,
+            margin,
+            margin,
+            width - margin,
+            height - margin,
+            color=ACCENT,
+            alpha=SIGNAL_BRACKET_ALPHA,
+            arm=10.0,
+            width=1,
+        )
         font = self._waveform_pil_font(WAVEFORM_FONT_MESSAGE_BASE)
         bbox = draw.textbbox((0, 0), text, font=font)
         text_width = bbox[2] - bbox[0]
@@ -549,21 +574,13 @@ class WaveformMixin:
     ) -> None:
         plot_left = float(layout["plot_left"])
         plot_right = float(layout["plot_right"])
-        plot_width = float(layout["plot_width"])
         plot_top = float(layout["plot_top"])
         plot_bottom = float(layout["plot_bottom"])
         target_band = layout.get("target_band")
         highlight = layout.get("highlight")
         target_low = layout.get("target_low")
         target_high = layout.get("target_high")
-        duration = float(layout.get("duration") or 0.0)
-        axis_y = float(layout["axis_y"])
-        label_y = float(layout["label_y"])
-        tick_len = float(layout["tick_len"])
-        bottom_margin = float(layout["bottom_margin"])
-        label_tick_gap = float(layout["label_tick_gap"])
         ui_scale = float(layout.get("ui_scale") or 1.0)
-        min_time_label_gap = 42.0 * ui_scale
 
         if target_band is not None and target_low is not None and target_high is not None:
             band_top, band_bottom = target_band  # type: ignore[misc]
@@ -592,21 +609,6 @@ class WaveformMixin:
                 font=edge_font,
                 anchor="rt",
             )
-
-        lufs_min = layout.get("lufs_min")
-        lufs_max = layout.get("lufs_max")
-        y_for_lufs = layout.get("y_for_lufs")
-        if lufs_min is not None and lufs_max is not None and callable(y_for_lufs):
-            scale_font = self._waveform_pil_font(WAVEFORM_FONT_SCALE_BASE)
-            for tick_value in (lufs_max, (float(lufs_max) + float(lufs_min)) / 2.0, lufs_min):
-                y_tick = float(y_for_lufs(float(tick_value)))  # type: ignore[operator]
-                draw.text(
-                    (plot_left - 6 * ui_scale, y_tick),
-                    f"{float(tick_value):.0f}",
-                    fill=self._hex_rgba(FG_MUTED),
-                    font=scale_font,
-                    anchor="rm",
-                )
 
         if len(curve_points) >= 2:
             last_x, last_y = curve_points[-1]
@@ -652,47 +654,6 @@ class WaveformMixin:
                 font=pill_font,
                 anchor="mm",
             )
-
-        if duration > 0.0:
-            time_font = self._waveform_pil_font(WAVEFORM_FONT_SCALE_BASE)
-            desired_ticks = 6
-            raw_interval = max(1.0, duration / float(desired_ticks))
-            tick_choices = (10, 15, 30, 60, 120, 180, 300, 600, 900, 1800)
-            tick_interval = tick_choices[-1]
-            for choice in tick_choices:
-                if choice >= raw_interval:
-                    tick_interval = choice
-                    break
-
-            tick_values = [0.0]
-            current = float(tick_interval)
-            while current < duration:
-                tick_values.append(current)
-                current += float(tick_interval)
-            if duration - tick_values[-1] > max(8.0, tick_interval * 0.35):
-                tick_values.append(duration)
-
-            last_label_x = -999.0
-            for tick in tick_values:
-                x = plot_left + max(0.0, min(plot_width, (tick / duration) * plot_width))
-                if x - last_label_x > min_time_label_gap or tick == 0.0 or tick == tick_values[-1]:
-                    if tick == 0.0:
-                        text_x = plot_left + 2 * ui_scale
-                        anchor = "ls"
-                    elif tick == tick_values[-1]:
-                        text_x = plot_right - 2 * ui_scale
-                        anchor = "rs"
-                    else:
-                        text_x = x
-                        anchor = "ms"
-                    draw.text(
-                        (text_x, label_y),
-                        self._format_time_short(tick),
-                        fill=self._hex_rgba(FG_MAIN),
-                        font=time_font,
-                        anchor=anchor,
-                    )
-                    last_label_x = x
 
     def _on_waveform_canvas_motion(self, event: tk.Event) -> None:
         region = self._waveform_loudest_region
@@ -901,28 +862,19 @@ class WaveformMixin:
         def s(value: float) -> float:
             return value * scale
 
-        lufs_scale_width = float(self._waveform_plot_left_px(width))
-        plot_left_1x = lufs_scale_width
-        plot_right_1x = float(width)
+        plot_pad_x = float(SPACE_1)
+        plot_left_1x = plot_pad_x
+        plot_right_1x = float(width) - plot_pad_x
         plot_width_1x = max(1.0, plot_right_1x - plot_left_1x)
         plot_left = s(plot_left_1x)
-        plot_right = float(render_width)
+        plot_right = s(plot_right_1x)
         plot_width = max(1.0, plot_right - plot_left)
 
-        ruler_font = self._waveform_pil_font(WAVEFORM_FONT_SCALE_BASE)
-        label_height = ruler_font.getbbox("0")[3] - ruler_font.getbbox("0")[1]
-        bottom_margin = 3.0 * ui_scale
-        tick_len = 5.0 * ui_scale
-        label_tick_gap = 4.0 * ui_scale
-        ruler_gap = 4.0 * ui_scale
-        ruler_height = label_height + tick_len + label_tick_gap + bottom_margin + ruler_gap + (2.0 * ui_scale)
-        ruler_height = max(34.0 * ui_scale, ruler_height)
-
         plot_top_1x = 2.0
-        plot_bottom_1x = max(plot_top_1x + 24.0, float(height) - ruler_height)
+        plot_bottom_1x = max(plot_top_1x + 24.0, float(height) - 2.0)
         plot_height_1x = max(1.0, plot_bottom_1x - plot_top_1x)
         plot_top = s(plot_top_1x)
-        plot_bottom = max(plot_top + s(24), float(render_height) - s(ruler_height))
+        plot_bottom = max(plot_top + s(24), float(render_height) - s(2.0))
         plot_height = max(1.0, plot_bottom - plot_top)
 
         loudness_raw = (
@@ -990,6 +942,16 @@ class WaveformMixin:
         marker_width = max(1, int(round(1.0 * scale)))
 
         draw.rectangle((plot_left, plot_top, plot_right, plot_bottom), fill=self._hex_rgba(WAVEFORM_BG))
+        draw_signal_grid(
+            draw,
+            plot_left,
+            plot_top,
+            plot_right,
+            plot_bottom,
+            spacing=s(float(SIGNAL_GRID_SPACING)),
+            color=ACCENT,
+            alpha=SIGNAL_GRID_ALPHA,
+        )
 
         if target_low is not None and target_high is not None and lufs_min is not None and lufs_max is not None:
             low = min(float(target_low), float(target_high))
@@ -1042,11 +1004,6 @@ class WaveformMixin:
                     fill=self._hex_rgba(WAVEFORM_GRID, 120),
                     width=max(1, scale),
                 )
-            draw.line(
-                (plot_left, plot_top, plot_left, plot_bottom),
-                fill=self._hex_rgba(BORDER_COLOR),
-                width=max(1, scale),
-            )
 
         mid_y = plot_top + (plot_height / 2.0)
         draw.line(
@@ -1135,39 +1092,37 @@ class WaveformMixin:
             )
             self._waveform_loudest_tooltip_text = self._format_waveform_loudest_tooltip(preview)
 
-        draw.rectangle(
-            (plot_left, plot_top, plot_right, plot_bottom),
-            outline=self._hex_rgba(BORDER_COLOR),
+        draw_inset_frame(
+            draw,
+            plot_left,
+            plot_top,
+            plot_right,
+            plot_bottom,
+            border=BORDER_COLOR,
+            highlight=SIGNAL_FRAME_HIGHLIGHT,
+            shadow=SIGNAL_FRAME_SHADOW,
             width=max(1, scale),
         )
-
-        label_y_1x = float(height) - bottom_margin
-        axis_y_1x = label_y_1x - label_height - label_tick_gap - tick_len
-        axis_y_1x = max(plot_bottom_1x + ruler_gap, axis_y_1x)
-
-        if duration > 0.0:
-            axis_y = max(plot_bottom + s(ruler_gap), s(axis_y_1x))
-            draw.line((plot_left, axis_y, plot_right, axis_y), fill=self._hex_rgba(BORDER_COLOR), width=max(1, scale))
-            desired_ticks = 6
-            raw_interval = max(1.0, duration / float(desired_ticks))
-            tick_choices = (10, 15, 30, 60, 120, 180, 300, 600, 900, 1800)
-            tick_interval = tick_choices[-1]
-            for choice in tick_choices:
-                if choice >= raw_interval:
-                    tick_interval = choice
-                    break
-
-            tick_values = [0.0]
-            current = float(tick_interval)
-            while current < duration:
-                tick_values.append(current)
-                current += float(tick_interval)
-            if duration - tick_values[-1] > max(8.0, tick_interval * 0.35):
-                tick_values.append(duration)
-
-            for tick in tick_values:
-                x = plot_left + max(0.0, min(plot_width, (tick / duration) * plot_width))
-                draw.line((x, axis_y, x, axis_y + s(tick_len)), fill=self._hex_rgba(BORDER_COLOR), width=max(1, scale))
+        draw_corner_brackets(
+            draw,
+            plot_left,
+            plot_top,
+            plot_right,
+            plot_bottom,
+            color=ACCENT,
+            alpha=SIGNAL_BRACKET_ALPHA,
+            arm=s(10.0),
+            width=max(1, scale),
+        )
+        draw_scanlines(
+            draw,
+            plot_left,
+            plot_top,
+            plot_right,
+            plot_bottom,
+            spacing=s(float(SIGNAL_SCANLINE_SPACING)),
+            alpha=SIGNAL_SCANLINE_ALPHA,
+        )
 
         img = img.resize((width, height), Image.Resampling.LANCZOS)
         text_draw = ImageDraw.Draw(img)
@@ -1181,12 +1136,6 @@ class WaveformMixin:
             "highlight": highlight_1x,
             "target_low": target_low,
             "target_high": target_high,
-            "duration": duration,
-            "axis_y": axis_y_1x,
-            "label_y": label_y_1x,
-            "tick_len": tick_len,
-            "bottom_margin": bottom_margin,
-            "label_tick_gap": label_tick_gap,
             "lufs_min": lufs_min,
             "lufs_max": lufs_max,
             "y_for_lufs": y_for_lufs_1x,
@@ -1206,8 +1155,6 @@ class WaveformMixin:
     def _draw_waveform_canvas(self, message: str | None = None) -> None:
         if not hasattr(self, "waveform_canvas"):
             return
-
-        self._sync_waveform_header_padding()
 
         canvas = self.waveform_canvas
         self._hide_waveform_hover_tip()

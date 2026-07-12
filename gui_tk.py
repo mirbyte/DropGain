@@ -126,6 +126,7 @@ from gui_utils import (  # noqa: F401
     position_tooltip_window,
     scaled_px,
     scaled_px_from_float,
+    telemetry_caption,
     treeview_column_width_px,
     treeview_rowheight_px,
     ui_scale_for,
@@ -341,12 +342,8 @@ class App(WaveformMixin, ctk.CTk):
                 pass
         if hasattr(self, "waveform_canvas"):
             try:
-                self._sync_waveform_header_padding()
-            except Exception:
-                pass
-        if hasattr(self, "waveform_canvas") and self._current_waveform_data is not None:
-            try:
-                self._draw_waveform_canvas()
+                if self._current_waveform_data is not None:
+                    self._draw_waveform_canvas()
             except Exception:
                 pass
         if self.library_tuning_page is not None:
@@ -671,13 +668,13 @@ class App(WaveformMixin, ctk.CTk):
         self._neutralize_treeview_selected_style(style)
         style.configure(
             "DropGain.Treeview.Heading",
-            background=BG_CARD,
+            background=HEADER_BG,
             foreground=FG_MUTED,
             bordercolor=BORDER_COLOR,
-            lightcolor=BG_CARD,
-            darkcolor=BG_CARD,
+            lightcolor=HEADER_BG,
+            darkcolor=HEADER_BG,
             font=self._treeview_heading_font,
-            relief="solid",
+            relief="flat",
         )
         style.map(
             "DropGain.Treeview.Heading",
@@ -760,10 +757,12 @@ class App(WaveformMixin, ctk.CTk):
             return
         if self._is_run_busy():
             if self._operation_started_at is not None:
-                message = self._operation_stats_text(
-                    self._operation_last_rate,
-                    self._operation_last_eta,
-                    self._operation_last_errors,
+                message = telemetry_caption(
+                    self._operation_stats_text(
+                        self._operation_last_rate,
+                        self._operation_last_eta,
+                        self._operation_last_errors,
+                    )
                 )
             else:
                 message = self.var_status.get().strip() or RESULTS_EMPTY_PLACEHOLDER
@@ -827,6 +826,54 @@ class App(WaveformMixin, ctk.CTk):
     def _font(size: int, weight: str | None = None) -> ctk.CTkFont:
         return ctk.CTkFont(family="Segoe UI", size=size, weight=weight)
 
+    def _mono_font(self, size: int, weight: str | None = None) -> ctk.CTkFont:
+        resolved = self._resolve_table_font(size, weight=weight)
+        return ctk.CTkFont(family=resolved.cget("family"), size=size, weight=weight or "normal")
+
+    def _entry(
+        self,
+        master: Any,
+        *,
+        textvariable: tk.Variable | None = None,
+        width: int | None = None,
+        height: int = ENTRY_HEIGHT,
+        size: int = TYPE_BODY,
+        mono: bool = False,
+    ) -> ctk.CTkEntry:
+        font = self._mono_font(size) if mono else self._font(size)
+        kwargs: dict[str, Any] = {
+            "master": master,
+            "fg_color": BG_FIELD,
+            "border_color": BORDER_COLOR,
+            "text_color": FG_MAIN,
+            "font": font,
+            "height": height,
+            "corner_radius": FIELD_CORNER_RADIUS,
+        }
+        if textvariable is not None:
+            kwargs["textvariable"] = textvariable
+        if width is not None:
+            kwargs["width"] = width
+        return ctk.CTkEntry(**kwargs)
+
+    def _section_label(
+        self,
+        master: Any,
+        *,
+        text: str,
+        bg: str = BG_MAIN,
+        anchor: str = "w",
+    ) -> ctk.CTkLabel:
+        return self._label(
+            master,
+            text=text.upper(),
+            color=FG_MUTED,
+            bg=bg,
+            size=TYPE_MICRO,
+            weight="bold",
+            anchor=anchor,
+        )
+
     def _label(
         self,
         master: Any,
@@ -840,6 +887,7 @@ class App(WaveformMixin, ctk.CTk):
         anchor: str = "w",
         wraplength: int = 0,
         justify: str = "center",
+        mono: bool = False,
     ) -> ctk.CTkLabel:
         kwargs: dict[str, Any] = {
             "master": master,
@@ -847,7 +895,7 @@ class App(WaveformMixin, ctk.CTk):
             "textvariable": textvariable,
             "fg_color": "transparent",
             "text_color": color,
-            "font": self._font(size, weight),
+            "font": self._mono_font(size, weight) if mono else self._font(size, weight),
             "anchor": anchor,
             "justify": justify,
         }
@@ -886,7 +934,8 @@ class App(WaveformMixin, ctk.CTk):
                 command=command,
                 fg_color=BUTTON_SECONDARY_BG,
                 hover_color=BUTTON_SECONDARY_HOVER,
-                border_width=0,
+                border_color=BUTTON_SECONDARY_BORDER,
+                border_width=1,
                 text_color=FG_MAIN,
                 text_color_disabled=BUTTON_DISABLED_TEXT,
                 font=self._font(TYPE_BODY),
@@ -1151,13 +1200,14 @@ class App(WaveformMixin, ctk.CTk):
             state="normal",
             fg_color=BUTTON_SECONDARY_BG,
             hover_color=BUTTON_SECONDARY_BG,
-            border_width=0,
+            border_color=BUTTON_SECONDARY_BORDER,
+            border_width=1,
             text_color=FG_MAIN,
             cursor=CURSOR_POINTER,
         )
 
     def _tab_button_style(self, *, active: bool) -> dict[str, Any]:
-        base = {"corner_radius": BUTTON_CORNER_RADIUS, "cursor": CURSOR_POINTER}
+        base = {"corner_radius": TAB_CORNER_RADIUS, "cursor": CURSOR_POINTER}
         if active:
             return {
                 **base,
@@ -1338,18 +1388,24 @@ class App(WaveformMixin, ctk.CTk):
         header.grid(row=0, column=0, sticky="ew")
         header.grid_columnconfigure(0, weight=1)
         header_inner = ctk.CTkFrame(header, fg_color="transparent")
-        header_inner.grid(row=0, column=0, sticky="ew", padx=PAGE_PADX, pady=(SPACE_3, SPACE_2))
+        header_inner.grid(row=0, column=0, sticky="ew", padx=PAGE_PADX, pady=SPACE_3)
         header_inner.grid_columnconfigure(0, weight=1)
         title_area = ctk.CTkFrame(header_inner, fg_color="transparent")
-        title_area.grid(row=0, column=0, sticky="w")
+        title_area.grid(row=0, column=0, sticky="nsw")
+        title_area.grid_rowconfigure(0, weight=1)
+        title_area.grid_rowconfigure(2, weight=1)
         self._label(title_area, text="DROPGAIN", bg=HEADER_BG, size=TYPE_DISPLAY, weight="bold").grid(
-            row=0, column=0, sticky="w"
+            row=1, column=0, sticky="w"
         )
 
         nav = ctk.CTkFrame(header_inner, fg_color="transparent")
-        nav.grid(row=0, column=1, sticky="e")
+        nav.grid(row=0, column=1, sticky="nse")
+        nav.grid_rowconfigure(0, weight=1)
+        nav.grid_rowconfigure(2, weight=1)
+        nav_buttons = ctk.CTkFrame(nav, fg_color="transparent")
+        nav_buttons.grid(row=1, column=0, sticky="e")
         self.btn_nav_process = ctk.CTkButton(
-            nav,
+            nav_buttons,
             text="PROCESS",
             width=100,
             height=28,
@@ -1358,7 +1414,7 @@ class App(WaveformMixin, ctk.CTk):
         self.btn_nav_process.grid(row=0, column=0, padx=(0, SPACE_2))
         self._register_tab_button(self.btn_nav_process, active=True)
         self.btn_nav_library = ctk.CTkButton(
-            nav,
+            nav_buttons,
             text="LIBRARY TUNING",
             width=130,
             height=28,
@@ -1367,7 +1423,7 @@ class App(WaveformMixin, ctk.CTk):
         self.btn_nav_library.grid(row=0, column=1, padx=(0, SPACE_2))
         self._register_tab_button(self.btn_nav_library, active=False)
         self.btn_nav_preferences = ctk.CTkButton(
-            nav,
+            nav_buttons,
             text="PREFERENCES",
             width=110,
             height=28,
@@ -1378,14 +1434,14 @@ class App(WaveformMixin, ctk.CTk):
         self.btn_settings = self.btn_nav_preferences
 
         self.btn_report_issue = ctk.CTkButton(
-            nav,
+            nav_buttons,
             text="Issue",
             width=55,
             height=28,
             fg_color=ISSUE_BUTTON_BG,
             hover_color=ISSUE_BUTTON_HOVER,
             text_color=FG_MUTED,
-            corner_radius=BUTTON_CORNER_RADIUS,
+            corner_radius=TAB_CORNER_RADIUS,
             font=self._font(TYPE_LABEL),
             command=self._open_report_issue,
         )
@@ -1549,6 +1605,11 @@ class App(WaveformMixin, ctk.CTk):
             self._configure_tab_button(self.btn_output_waveform, active=not show_log)
         if hasattr(self, "btn_output_log"):
             self._configure_tab_button(self.btn_output_log, active=show_log)
+        if hasattr(self, "output_track_info"):
+            if show_log:
+                self.output_track_info.grid_remove()
+            else:
+                self.output_track_info.grid(row=0, column=1, sticky="e", padx=(SPACE_2, 0))
 
         def swap() -> None:
             if show_log:
@@ -1704,7 +1765,7 @@ class App(WaveformMixin, ctk.CTk):
         if self._analyzed_rows and not self._analysis_is_current():
             changes = self._analysis_stale_changes()
             detail = f" Changed: {', '.join(changes[:4])}." if changes else ""
-            self.var_status.set("Settings changed since analysis. Re-analyze before rendering." + detail)
+            self._set_telemetry_status("Settings changed since analysis. Re-analyze before rendering." + detail)
 
         self._set_idle_state()
 
@@ -2026,6 +2087,14 @@ class App(WaveformMixin, ctk.CTk):
                 self._progress_tween_step,
             )
 
+    def _set_operation_phase_display(self, text: str) -> None:
+        if hasattr(self, "var_operation_phase"):
+            self.var_operation_phase.set(telemetry_caption(text))
+
+    def _set_telemetry_status(self, text: str) -> None:
+        if hasattr(self, "var_status"):
+            self.var_status.set(telemetry_caption(text))
+
     def _operation_phase_label(self) -> str:
         if self._active_phase == "idle":
             return "Done" if self._run_completed else "Ready"
@@ -2117,7 +2186,7 @@ class App(WaveformMixin, ctk.CTk):
 
     def _operation_stats_text(self, rate: float, eta: str, errors: int) -> str:
         elapsed = self._format_elapsed_duration(self._operation_elapsed_seconds())
-        if hasattr(self, "var_operation_phase") and self.var_operation_phase.get() == "Cancelling":
+        if self._cancel_flag.is_set() and self._is_run_busy():
             return f"{elapsed} elapsed · finishing current track(s)"
         if self._active_phase in {"analyze", "render"}:
             error_label = "error" if errors == 1 else "errors"
@@ -2145,7 +2214,7 @@ class App(WaveformMixin, ctk.CTk):
             return
         if self._operation_started_at is None:
             return
-        self.var_status.set(
+        self._set_telemetry_status(
             self._operation_stats_text(
                 self._operation_last_rate,
                 self._operation_last_eta,
@@ -2164,11 +2233,11 @@ class App(WaveformMixin, ctk.CTk):
         self._operation_last_eta = eta
         self._operation_last_errors = errors
 
-        self.var_operation_phase.set(self._operation_phase_label())
+        self._set_operation_phase_display(self._operation_phase_label())
         self.var_operation_fraction.set(self._operation_fraction_text())
 
         if self._active_phase in {"preflight", "analyze", "render"}:
-            self.var_status.set(self._operation_stats_text(rate, eta, errors))
+            self._set_telemetry_status(self._operation_stats_text(rate, eta, errors))
         self._refresh_results_empty_message()
 
         if self._active_phase != "preflight":
@@ -2199,7 +2268,7 @@ class App(WaveformMixin, ctk.CTk):
         self._cancel_progress_tween()
         self._set_progress_indeterminate(False)
         if hasattr(self, "var_operation_phase"):
-            self.var_operation_phase.set(self._operation_phase_label())
+            self._set_operation_phase_display(self._operation_phase_label())
             self.var_operation_fraction.set("")
         self._set_progress_bars(0.0, immediate=True)
         self._update_metric_phase_highlight()
@@ -2225,9 +2294,9 @@ class App(WaveformMixin, ctk.CTk):
         self._update_busy_button_label()
         self._update_metric_phase_highlight()
         if hasattr(self, "var_operation_phase"):
-            self.var_operation_phase.set("Preparing")
+            self._set_operation_phase_display("Preparing")
             self.var_operation_fraction.set("")
-        self.var_status.set(initial_status)
+        self._set_telemetry_status(initial_status)
         self._set_progress_bars(0.0, immediate=True)
         self._set_progress_indeterminate(True)
         self._refresh_results_empty_message()
@@ -2241,7 +2310,7 @@ class App(WaveformMixin, ctk.CTk):
         self._update_metric_phase_highlight()
         self._update_busy_button_label()
         if hasattr(self, "var_operation_phase"):
-            self.var_operation_phase.set(self._operation_phase_label())
+            self._set_operation_phase_display(self._operation_phase_label())
             self.var_operation_fraction.set(self._operation_fraction_text())
             self.update_idletasks()
         if hasattr(self, "results_empty_label"):
@@ -2491,7 +2560,7 @@ class App(WaveformMixin, ctk.CTk):
                 "The current analysis no longer matches the settings. Re-analyze before rendering."
                 + detail,
             )
-            self.var_status.set("Re-analyze required before rendering.")
+            self._set_telemetry_status("Re-analyze required before rendering.")
             self._set_idle_state()
             return
 
@@ -2678,7 +2747,7 @@ class App(WaveformMixin, ctk.CTk):
     def _cancel(self) -> None:
         self._cancel_flag.set()
         if hasattr(self, "var_operation_phase"):
-            self.var_operation_phase.set("Cancelling")
+            self._set_operation_phase_display("Cancelling")
             self.var_operation_fraction.set("")
         self._refresh_operation_elapsed()
 
@@ -2846,7 +2915,7 @@ class App(WaveformMixin, ctk.CTk):
                             text, tag = data  # type: ignore[misc]
                             self._log(str(text), tag)
                         elif kind == "status":
-                            self.var_status.set(str(data))
+                            self._set_telemetry_status(str(data))
                             self._refresh_results_empty_message()
                         elif kind == "phase":
                             self._set_active_phase(str(data))
@@ -2887,21 +2956,21 @@ class App(WaveformMixin, ctk.CTk):
                         elif kind == "finished":
                             self._run_completed = True
                             self._set_idle_state()
-                            self.var_status.set("Done.")
+                            self._set_telemetry_status("Done.")
                             if self._close_requested:
                                 self._finish_close()
                                 stop_polling = True
                                 return
                         elif kind == "cancelled":
                             self._set_idle_state()
-                            self.var_status.set("Cancelled.")
+                            self._set_telemetry_status("Cancelled.")
                             if self._close_requested:
                                 self._finish_close()
                                 stop_polling = True
                                 return
                         elif kind == "fatal":
                             self._set_idle_state()
-                            self.var_status.set("Error. See output above.")
+                            self._set_telemetry_status("Error. See output above.")
                             self._show_fatal_job_error_dialog()
                             if self._close_requested:
                                 self._finish_close()
@@ -3318,9 +3387,9 @@ class App(WaveformMixin, ctk.CTk):
         if self._worker_thread is not None and self._worker_thread.is_alive():
             self._close_requested = True
             self._cancel_flag.set()
-            self.var_status.set("Closing after current track(s) finish...")
+            self._set_telemetry_status("Closing after current track(s) finish...")
             if hasattr(self, "var_operation_phase"):
-                self.var_operation_phase.set("Cancelling")
+                self._set_operation_phase_display("Cancelling")
                 self.var_operation_fraction.set("")
             self._refresh_results_empty_message()
             self._logger.warning("Close requested. Cancelling after current file(s) finish.")
