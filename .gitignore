@@ -18,6 +18,7 @@ dist/
 *.egg-info/
 *.egg
 pip-wheel-metadata/
+*.vst3
 
 # Test / lint / type tools
 .pytest_cache/

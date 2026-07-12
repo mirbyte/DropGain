@@ -2068,8 +2068,8 @@ def shutdown_prol2_render_host(*, wait: bool = True) -> None:
 
 
 def common_vst3_roots() -> list[Path]:
-    """Return standard VST3 plugin directories for the current OS."""
-    roots: list[Path] = []
+    """Return the app-local and standard VST3 plugin directories."""
+    roots: list[Path] = [Path(__file__).resolve().parent / "plugins"]
     if os.name == "nt":
         program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
         roots.append(Path(program_files) / "Common Files" / "VST3")
@@ -2096,7 +2096,7 @@ _cached_prol2_path: str | None = None
 
 
 def find_prol2_plugin_path(configured_path: str | None = None) -> str:
-    """Locate Pro-L 2 VST3: configured path > env > auto-find in common VST3 roots.
+    """Locate Pro-L 2 VST3: configured path > env > app-local/system roots.
 
     The result is cached after the first successful lookup so subsequent calls
     in the same process skip the filesystem scan.
@@ -2149,10 +2149,10 @@ def find_prol2_plugin_path(configured_path: str | None = None) -> str:
         _cached_prol2_path = str(unique[0])
         return _cached_prol2_path
 
-    roots = "\n".join(f"  - {p}" for p in common_vst3_roots()) or "  - no standard VST3 roots found"
+    roots = "\n".join(f"  - {p}" for p in common_vst3_roots()) or "  - no VST3 roots found"
     raise RuntimeError(
         "Could not auto-find FabFilter Pro-L 2 VST3. Set PROL2_PLUGIN_PATH to the .vst3 path.\n"
-        f"Searched:\n{roots}"
+        f"Searched VST3 roots:\n{roots}"
     )
 
 
@@ -2160,7 +2160,7 @@ _cached_loudmax_path: str | None = None
 
 
 def find_loudmax_plugin_path(configured_path: str | None = None) -> str:
-    """Locate LoudMax VST3: configured path > env > auto-find in common VST3 roots.
+    """Locate LoudMax VST3: configured path > env > app-local/system roots.
 
     The result is cached after the first successful lookup so subsequent calls
     in the same process skip the filesystem scan.
@@ -2197,10 +2197,10 @@ def find_loudmax_plugin_path(configured_path: str | None = None) -> str:
         _cached_loudmax_path = str(unique[0])
         return _cached_loudmax_path
 
-    roots = "\n".join(f"  - {p}" for p in common_vst3_roots()) or "  - no standard VST3 roots found"
+    roots = "\n".join(f"  - {p}" for p in common_vst3_roots()) or "  - no VST3 roots found"
     raise RuntimeError(
         "Could not auto-find LoudMax VST3. Set LOUDMAX_PLUGIN_PATH to the .vst3 path.\n"
-        f"Searched:\n{roots}"
+        f"Searched VST3 roots:\n{roots}"
     )
 
 

@@ -225,7 +225,7 @@ Load `_DG` copies (or your output folder) into the library you play from, not un
 ### Dependencies and launch
 
 - **FFmpeg / ffprobe** - on `PATH`
-- A limiter VST3 for limiter-assisted mode, selected in **Preferences → Limiter engine**: **FabFilter Pro-L 2** (`PROL2_PLUGIN_PATH` or auto-discovery) or **LoudMax**, free (`LOUDMAX_PLUGIN_PATH` or auto-discovery)
+- A limiter VST3 for limiter-assisted mode, selected in **Preferences → Limiter engine**: **FabFilter Pro-L 2** (`PROL2_PLUGIN_PATH` or auto-discovery from the system VST3 folder) or **LoudMax**, free (`LOUDMAX_PLUGIN_PATH` or auto-discovery). Optionally, copy the LoudMax `.vst3` into the app-local `plugins` folder instead of installing system-wide; see `plugins/README.txt`.
 - **Python** - `customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`
 
 Launch `main.pyw`. **Preferences → Check Limiter / System** validates the toolchain before batch render.
