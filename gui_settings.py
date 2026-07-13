@@ -252,7 +252,7 @@ class PreferencesPage(ctk.CTkFrame):
         )
         btn_reset_defaults.configure(
             height=footer_button_height,
-            corner_radius=4,
+            corner_radius=BUTTON_CORNER_RADIUS,
         )
         btn_reset_defaults.pack(side="left")
         self.btn_system_check = app._button(
@@ -262,7 +262,7 @@ class PreferencesPage(ctk.CTkFrame):
         )
         self.btn_system_check.configure(
             height=footer_button_height,
-            corner_radius=footer_button_height // 2,
+            corner_radius=BUTTON_CORNER_RADIUS,
         )
         self.btn_system_check.pack(side="left", padx=(8, 0))
 
