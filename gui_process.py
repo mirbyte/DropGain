@@ -383,7 +383,7 @@ class ProcessPage(ctk.CTkFrame):
         settings_line.pack(anchor="center")
         app._label(
             settings_line,
-            text=telemetry_caption("ACTIVE SETTINGS"),
+            text="ACTIVE SETTINGS",
             color=FG_MUTED,
             bg=BG_MAIN,
             size=TYPE_MICRO,
