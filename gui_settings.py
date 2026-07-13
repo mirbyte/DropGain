@@ -197,7 +197,14 @@ class PreferencesPage(ctk.CTkFrame):
         header = ctk.CTkFrame(body, fg_color="transparent")
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
-        app._label(header, text="Settings", bg=BG_MAIN, size=SETTINGS_TITLE, weight="bold").grid(
+        app._label(
+            header,
+            text="Settings",
+            bg=BG_MAIN,
+            size=SETTINGS_TITLE,
+            weight="bold",
+            accent=True,
+        ).grid(
             row=0, column=0, sticky="w"
         )
 

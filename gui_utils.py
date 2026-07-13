@@ -6,6 +6,7 @@ import logging
 import os
 import queue
 from collections.abc import Callable
+from pathlib import Path
 
 import tkinter as tk
 from tkinter import ttk
@@ -23,6 +24,9 @@ from gui_theme import (
     TREEVIEW_ROW_EXTRA_PAD,
     TREEVIEW_ROW_HEIGHT,
     TYPE_MICRO,
+    BRAND_DISPLAY_FONT_CANDIDATES,
+    METRIC_TILE_VALUE_FONT_CANDIDATES,
+    UI_ACCENT_FONT_CANDIDATES,
     WINDOW_DESIGN_DEFAULT_HEIGHT,
     WINDOW_DESIGN_DEFAULT_WIDTH,
     WINDOW_DESIGN_MIN_HEIGHT,
@@ -40,6 +44,78 @@ def telemetry_caption(text: str) -> str:
     if stripped.startswith("// "):
         return stripped
     return f"// {stripped}"
+
+
+def _fonts_directory() -> Path:
+    return Path(__file__).resolve().parent / "fonts"
+
+
+def _register_font_file(root: tk.Misc, path: Path) -> tuple[str, ...]:
+    resolved = path.resolve()
+    if not resolved.is_file():
+        return ()
+
+    before = {str(name).lower() for name in root.tk.call("font", "families")}
+
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            added = ctypes.windll.gdi32.AddFontResourceExW(str(resolved), 0x10, 0)
+            if added == 0:
+                ctypes.windll.gdi32.AddFontResourceExW(str(resolved), 0, 0)
+        except Exception:
+            return ()
+    else:
+        return ()
+
+    available = {str(name).lower(): str(name) for name in root.tk.call("font", "families")}
+    return tuple(available[key] for key in available if key not in before)
+
+
+def register_app_fonts(root: tk.Misc) -> tuple[str, ...]:
+    """Load bundled/optional fonts from fonts/ (including subfolders) for this process."""
+    fonts_dir = _fonts_directory()
+    if not fonts_dir.is_dir():
+        return ()
+
+    registered: list[str] = []
+    paths = sorted(fonts_dir.rglob("*.ttf")) + sorted(fonts_dir.rglob("*.otf"))
+    for path in paths:
+        for family in _register_font_file(root, path):
+            if family not in registered:
+                registered.append(family)
+    return tuple(registered)
+
+
+def resolve_font_family(
+    root: tk.Misc,
+    registered: tuple[str, ...],
+    candidates: tuple[str, ...],
+) -> str:
+    available = {name.lower(): name for name in root.tk.call("font", "families")}
+    registered_lower = {name.lower() for name in registered}
+    for candidate in candidates:
+        key = candidate.lower()
+        if key in registered_lower:
+            return available[key]
+    for candidate in candidates:
+        resolved = available.get(candidate.lower())
+        if resolved:
+            return resolved
+    return "Segoe UI"
+
+
+def resolve_brand_display_family(root: tk.Misc, registered: tuple[str, ...]) -> str:
+    return resolve_font_family(root, registered, BRAND_DISPLAY_FONT_CANDIDATES)
+
+
+def resolve_metric_value_family(root: tk.Misc, registered: tuple[str, ...]) -> str:
+    return resolve_font_family(root, registered, METRIC_TILE_VALUE_FONT_CANDIDATES)
+
+
+def resolve_ui_accent_family(root: tk.Misc, registered: tuple[str, ...]) -> str:
+    return resolve_font_family(root, registered, UI_ACCENT_FONT_CANDIDATES)
 
 
 def enable_windows_dpi_awareness() -> None:

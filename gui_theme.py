@@ -118,8 +118,27 @@ SIGNAL_PANEL_CORNER_RADIUS = 4
 HEADER_SIGNAL_BAR_WIDTH = 3
 METRIC_TILE_ACCENT_HEIGHT = 2
 
+# Brand display type (hero wordmark; loaded from fonts/ or system)
+BRAND_DISPLAY_FONT_CANDIDATES = (
+    "Karnivore Blue",
+    "Orbitron",
+)
+BRAND_WORDMARK_COLOR = ACCENT
+BRAND_WORDMARK_SIZE = 40
+
+# Hero numerals on process-page metric tiles (readable at large sizes)
+METRIC_TILE_VALUE_FONT_CANDIDATES = (
+    "Orbitron",
+    "Consolas",
+)
+
+# Instrument chrome: table headings, nav tabs, metric tile captions
+UI_ACCENT_FONT_CANDIDATES = (
+    "Orbitron",
+    "Consolas",
+)
+
 # Type scale (Segoe UI + instrument mono for numeric readouts)
-TYPE_DISPLAY = 28
 TYPE_H1 = 15
 TYPE_BODY = 13
 TYPE_LABEL = 12

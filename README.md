@@ -249,6 +249,14 @@ Launch `main.pyw`. **Preferences → Check Limiter / System** validates the tool
 
 UI invokes `jobs.py`; work runs on background threads with queue-based progress.
 
+## License
+
+DropGain is released under the [GNU Affero General Public License v3.0](LICENSE).
+
+Some third-party assets shipped with the project are covered by separate licenses in the repository.
+
+For legal or compliance questions, contact the maintainer on [GitHub](https://github.com/mirbyte).
+
 <br>
 <br>
 

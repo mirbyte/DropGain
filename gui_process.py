@@ -32,6 +32,7 @@ from gui_theme import (
     METRIC_TILE_CORNER_RADIUS,
     METRIC_TILE_GAP,
     METRIC_TILE_HEIGHT,
+    METRIC_TILE_LABEL_SIZE,
     METRIC_TILE_VALUE_SIZE,
     METRIC_TILE_WIDTH,
     OUTPUT_CONTENT_HEIGHT,
@@ -359,7 +360,7 @@ class ProcessPage(ctk.CTkFrame):
                 color=value_color,
                 bg=METRIC_BG,
                 size=METRIC_TILE_VALUE_SIZE,
-                weight="bold",
+                display=True,
                 anchor="center",
             )
             value_label.place(relx=0.5, rely=0.36, anchor="center")
@@ -368,8 +369,8 @@ class ProcessPage(ctk.CTkFrame):
                 text=label,
                 color=FG_MUTED,
                 bg=METRIC_BG,
-                size=TYPE_CAPTION,
-                mono=True,
+                size=METRIC_TILE_LABEL_SIZE,
+                accent=True,
                 anchor="center",
             ).place(relx=0.5, rely=0.76, anchor="center")
             app._summary_chip_labels[chip_id] = value_label

@@ -124,6 +124,10 @@ from gui_utils import (  # noqa: F401
     make_tooltip_label,
     pointer_inside_widget,
     position_tooltip_window,
+    register_app_fonts,
+    resolve_brand_display_family,
+    resolve_metric_value_family,
+    resolve_ui_accent_family,
     scaled_px,
     scaled_px_from_float,
     telemetry_caption,
@@ -177,6 +181,10 @@ class App(WaveformMixin, ctk.CTk):
         ctk.set_appearance_mode("dark")
         super().__init__(fg_color=BG_MAIN)
 
+        self._registered_font_families = register_app_fonts(self)
+        self._brand_display_family = resolve_brand_display_family(self, self._registered_font_families)
+        self._metric_value_family = resolve_metric_value_family(self, self._registered_font_families)
+        self._ui_accent_family = resolve_ui_accent_family(self, self._registered_font_families)
         self.title(APP_TITLE)
         self._last_ui_scale = ui_scale_for(self)
         self._dpi_refresh_after_id: str | None = None
@@ -640,6 +648,13 @@ class App(WaveformMixin, ctk.CTk):
                 return tkfont.Font(family=resolved, size=size, weight=weight or "normal")
         return tkfont.Font(family="Segoe UI", size=size, weight=weight or "normal")
 
+    def _resolve_ui_accent_tkfont(self, size: int, *, weight: str | None = None) -> tkfont.Font:
+        return tkfont.Font(
+            family=self._ui_accent_family,
+            size=size,
+            weight=weight or "normal",
+        )
+
     def _configure_treeview_style(self) -> None:
         style = ttk.Style()
         try:
@@ -647,7 +662,7 @@ class App(WaveformMixin, ctk.CTk):
         except tk.TclError:
             pass
 
-        self._treeview_heading_font = self._resolve_table_font(TABLE_HEADING_SIZE, weight="bold")
+        self._treeview_heading_font = self._resolve_ui_accent_tkfont(TABLE_HEADING_SIZE, weight="bold")
         self._treeview_cell_font = self._resolve_table_font(TABLE_CELL_SIZE)
         rowheight = treeview_rowheight_px(
             self._treeview_cell_font.metrics("linespace"),
@@ -671,10 +686,11 @@ class App(WaveformMixin, ctk.CTk):
             background=HEADER_BG,
             foreground=FG_MUTED,
             bordercolor=BORDER_COLOR,
-            lightcolor=HEADER_BG,
+            lightcolor=BORDER_COLOR,
             darkcolor=HEADER_BG,
             font=self._treeview_heading_font,
-            relief="flat",
+            relief="raised",
+            borderwidth=1,
         )
         style.map(
             "DropGain.Treeview.Heading",
@@ -826,6 +842,15 @@ class App(WaveformMixin, ctk.CTk):
     def _font(size: int, weight: str | None = None) -> ctk.CTkFont:
         return ctk.CTkFont(family="Segoe UI", size=size, weight=weight)
 
+    def _brand_font(self, size: int) -> ctk.CTkFont:
+        return ctk.CTkFont(family=self._brand_display_family, size=size, weight="bold")
+
+    def _metric_value_font(self, size: int) -> ctk.CTkFont:
+        return ctk.CTkFont(family=self._metric_value_family, size=size, weight="bold")
+
+    def _ui_accent_font(self, size: int, weight: str | None = None) -> ctk.CTkFont:
+        return ctk.CTkFont(family=self._ui_accent_family, size=size, weight=weight or "normal")
+
     def _mono_font(self, size: int, weight: str | None = None) -> ctk.CTkFont:
         resolved = self._resolve_table_font(size, weight=weight)
         return ctk.CTkFont(family=resolved.cget("family"), size=size, weight=weight or "normal")
@@ -888,14 +913,24 @@ class App(WaveformMixin, ctk.CTk):
         wraplength: int = 0,
         justify: str = "center",
         mono: bool = False,
+        display: bool = False,
+        accent: bool = False,
     ) -> ctk.CTkLabel:
+        if display:
+            font = self._metric_value_font(size)
+        elif accent:
+            font = self._ui_accent_font(size, weight)
+        elif mono:
+            font = self._mono_font(size, weight)
+        else:
+            font = self._font(size, weight)
         kwargs: dict[str, Any] = {
             "master": master,
             "text": text or "",
             "textvariable": textvariable,
             "fg_color": "transparent",
             "text_color": color,
-            "font": self._mono_font(size, weight) if mono else self._font(size, weight),
+            "font": font,
             "anchor": anchor,
             "justify": justify,
         }
@@ -1216,7 +1251,7 @@ class App(WaveformMixin, ctk.CTk):
                 "border_color": ACCENT,
                 "border_width": 1,
                 "text_color": ACCENT,
-                "font": self._font(TYPE_LABEL, "bold"),
+                "font": self._ui_accent_font(TYPE_LABEL, "bold"),
             }
         return {
             **base,
@@ -1224,7 +1259,7 @@ class App(WaveformMixin, ctk.CTk):
             "hover_color": BG_MAIN,
             "border_width": 0,
             "text_color": FG_MUTED,
-            "font": self._font(TYPE_LABEL),
+            "font": self._ui_accent_font(TYPE_LABEL),
         }
 
     def _card(self, master: Any, color: str = BG_CARD, padding: int | tuple[int, int] = 0) -> ctk.CTkFrame:
@@ -1394,9 +1429,14 @@ class App(WaveformMixin, ctk.CTk):
         title_area.grid(row=0, column=0, sticky="nsw")
         title_area.grid_rowconfigure(0, weight=1)
         title_area.grid_rowconfigure(2, weight=1)
-        self._label(title_area, text="DROPGAIN", bg=HEADER_BG, size=TYPE_DISPLAY, weight="bold").grid(
-            row=1, column=0, sticky="w"
-        )
+        ctk.CTkLabel(
+            title_area,
+            text="DROPGAIN",
+            fg_color="transparent",
+            text_color=BRAND_WORDMARK_COLOR,
+            font=self._brand_font(BRAND_WORDMARK_SIZE),
+            anchor="w",
+        ).grid(row=1, column=0, sticky="w")
 
         nav = ctk.CTkFrame(header_inner, fg_color="transparent")
         nav.grid(row=0, column=1, sticky="nse")
