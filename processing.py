@@ -1620,7 +1620,7 @@ def validate_aiff_container(output_path: str) -> list[str]:
 
 
 def validate_pioneer_compatible_aiff_format(output_info: dict[str, object]) -> list[str]:
-    """Return Pioneer/Rekordbox format problems for an already-probed AIFF output."""
+    """Return CDJ/XDJ/Rekordbox format problems for an already-probed AIFF output."""
     problems: list[str] = []
 
     sample_rate = parse_int_or_default(output_info.get("sample_rate"), 0)
@@ -1639,7 +1639,7 @@ def validate_pioneer_compatible_aiff_format(output_info: dict[str, object]) -> l
 
 
 def validate_pioneer_compatible_aiff(output_path: str) -> list[str]:
-    """Return container and Pioneer-format problems for DJ-safe AIFF exports."""
+    """Return container and CDJ/XDJ-format problems for DJ-safe AIFF exports."""
     problems = validate_aiff_container(output_path)
     try:
         output_info = ffprobe_audio_info(output_path)
@@ -1708,7 +1708,7 @@ def finalize_processed_output(
             problems.extend(validate_pioneer_compatible_aiff_format(output_info))
         if problems:
             delete_output_on_validation_failure(output_path)
-            label = "Pioneer-compatible AIFF" if pioneer_compatible_aiff else "AIFF"
+            label = "CDJ/XDJ-compatible AIFF" if pioneer_compatible_aiff else "AIFF"
             raise RuntimeError(f"{label} validation failed: " + "; ".join(problems))
     elif STRICT_VERIFY_LOSSLESS_OUTPUT:
         verify_lossless_output(

@@ -68,8 +68,8 @@ PROCESSED_SUFFIX = "_DG"
 
 OUTPUT_FORMAT_PRESERVE = "Preserve source format"
 OUTPUT_FORMAT_MP3_TO_AIFF = "MP3 sources to AIFF"
-OUTPUT_FORMAT_ALL_TO_AIFF = "All processed copies to AIFF"
-OUTPUT_FORMAT_ALL_TO_MP3 = "All processed copies to MP3"
+OUTPUT_FORMAT_ALL_TO_AIFF = "All outputs as AIFF"
+OUTPUT_FORMAT_ALL_TO_MP3 = "All outputs as MP3"
 OUTPUT_FORMAT_MODE_CHOICES = (
     OUTPUT_FORMAT_PRESERVE,
     OUTPUT_FORMAT_MP3_TO_AIFF,
@@ -482,9 +482,9 @@ def output_format_mode_description(output_format_mode: object) -> str:
     if mode == OUTPUT_FORMAT_MP3_TO_AIFF:
         return "MP3 sources render as AIFF; lossless sources preserve their format"
     if mode == OUTPUT_FORMAT_ALL_TO_AIFF:
-        return "all processed copies render as Pioneer-compatible AIFF (44.1/48 kHz, 16/24-bit PCM)"
+        return "all outputs render as CDJ/XDJ-compatible AIFF (44.1/48 kHz, 16/24-bit PCM)"
     if mode == OUTPUT_FORMAT_ALL_TO_MP3:
-        return f"all processed copies render as {MP3_OUTPUT_BITRATE} MP3"
+        return f"all outputs render as {MP3_OUTPUT_BITRATE} MP3"
     return "preserve source format"
 
 
@@ -492,7 +492,7 @@ def output_format_mode_tooltip() -> str:
     """Return hover tooltip text for the output format setting."""
     return (
         "Recommended mode avoids encoding MP3 twice. "
-        "Preserve and All-to-MP3 can push or approximate true peak above your ceiling; "
+        "Preserve source format and All outputs as MP3 can push or approximate true peak above your ceiling; "
         "AIFF output stays closer to the limiter result."
     )
 
@@ -514,8 +514,8 @@ def output_format_mode_ui_hint(output_format_mode: object) -> tuple[str, bool]:
         )
     if mode == OUTPUT_FORMAT_ALL_TO_AIFF:
         return (
-            "Every processed copy becomes Pioneer-compatible AIFF (44.1/48 kHz, 16/24-bit PCM) "
-            "for rekordbox and CDJ/XDJ import.",
+            "Every rendered file becomes CDJ/XDJ-compatible AIFF (44.1/48 kHz, 16/24-bit PCM) "
+            "for rekordbox import.",
             False,
         )
     return "", False
@@ -1216,7 +1216,7 @@ def requires_pioneer_compatible_aiff(output_format_mode: object, output_path: st
 
 
 def pioneer_compatible_aiff_sample_rate(source_sr: int) -> int:
-    """Map any source rate to 44.1 or 48 kHz for Pioneer player compatibility."""
+    """Map any source rate to 44.1 or 48 kHz for CDJ/XDJ player compatibility."""
     if source_sr in PIONEER_COMPATIBLE_AIFF_SAMPLE_RATES:
         return source_sr
     if source_sr in (88_200, 176_400, 352_800):
@@ -1230,7 +1230,7 @@ def pioneer_compatible_aiff_codec(
     source_info: dict[str, object],
     source_ext: str = "",
 ) -> str:
-    """Return 16- or 24-bit PCM for All-to-AIFF exports, matching source depth when known."""
+    """Return 16- or 24-bit PCM for All outputs as AIFF exports, matching source depth when known."""
     bit_depth_int = parse_int_or_default(
         infer_bit_depth(source_info, str(source_ext or "")),
         0,
