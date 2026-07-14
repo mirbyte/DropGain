@@ -1432,14 +1432,25 @@ class App(WaveformMixin, ctk.CTk):
         title_area.grid(row=0, column=0, sticky="nsw")
         title_area.grid_rowconfigure(0, weight=1)
         title_area.grid_rowconfigure(2, weight=1)
+        wordmark_row = ctk.CTkFrame(title_area, fg_color="transparent")
+        wordmark_row.grid(row=1, column=0, sticky="w")
+        brand_font = self._brand_font(BRAND_WORDMARK_SIZE)
         ctk.CTkLabel(
-            title_area,
-            text="DROPGAIN",
+            wordmark_row,
+            text="DROP",
             fg_color="transparent",
             text_color=BRAND_WORDMARK_COLOR,
-            font=self._brand_font(BRAND_WORDMARK_SIZE),
+            font=brand_font,
             anchor="w",
-        ).grid(row=1, column=0, sticky="w")
+        ).pack(side="left")
+        ctk.CTkLabel(
+            wordmark_row,
+            text="GAIN",
+            fg_color="transparent",
+            text_color=BRAND_WORDMARK_ACCENT_COLOR,
+            font=brand_font,
+            anchor="w",
+        ).pack(side="left")
 
         nav = ctk.CTkFrame(header_inner, fg_color="transparent")
         nav.grid(row=0, column=1, sticky="nse")
