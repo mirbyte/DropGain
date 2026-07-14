@@ -9,6 +9,10 @@
 
 **The default open-source loudness prep tool for DJs.**
 
+<img width="3750" height="229" alt="waveform" src="https://github.com/user-attachments/assets/6ab33761-a1c6-4881-8fdc-18de8ee541ee" />
+
+
+
 *Loudness matching for the loudest part of the track, not the whole-file average.*
 
 EDM- and DJ-library oriented section loudness normalization: analyze the loudest section, suggest gain for a target LUFS band under a true-peak ceiling, write `_DG` copies. Complements DJ software and commercial prep tools.
