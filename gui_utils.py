@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -27,7 +28,10 @@ from gui_theme import (
     TYPE_MICRO,
     BRAND_DISPLAY_FONT_CANDIDATES,
     METRIC_TILE_VALUE_FONT_CANDIDATES,
+    TABLE_CELL_FONT_FAMILY,
+    TABLE_CELL_FONT_FALLBACKS,
     UI_ACCENT_FONT_CANDIDATES,
+    UI_BODY_FONT_CANDIDATES,
     WINDOW_DESIGN_DEFAULT_HEIGHT,
     WINDOW_DESIGN_DEFAULT_WIDTH,
     WINDOW_DESIGN_MIN_HEIGHT,
@@ -68,7 +72,11 @@ def _register_font_file(root: tk.Misc, path: Path) -> tuple[str, ...]:
         except Exception:
             return ()
     else:
-        return ()
+        try:
+            internal_name = f"dropgain_{abs(hash(str(resolved))) & 0xFFFFFFFF:08x}"
+            root.tk.call("font", "create", internal_name, "-file", str(resolved))
+        except Exception:
+            return ()
 
     available = {str(name).lower(): str(name) for name in root.tk.call("font", "families")}
     return tuple(available[key] for key in available if key not in before)
@@ -104,7 +112,21 @@ def resolve_font_family(
         resolved = available.get(candidate.lower())
         if resolved:
             return resolved
-    return "Segoe UI"
+    if candidates == UI_BODY_FONT_CANDIDATES:
+        return "Segoe UI" if os.name == "nt" else "Helvetica"
+    return resolve_body_font_family(root, registered)
+
+
+def resolve_body_font_family(root: tk.Misc, registered: tuple[str, ...]) -> str:
+    return resolve_font_family(root, registered, UI_BODY_FONT_CANDIDATES)
+
+
+def resolve_table_cell_family(root: tk.Misc, registered: tuple[str, ...]) -> str:
+    return resolve_font_family(
+        root,
+        registered,
+        (TABLE_CELL_FONT_FAMILY, *TABLE_CELL_FONT_FALLBACKS),
+    )
 
 
 def resolve_brand_display_family(root: tk.Misc, registered: tuple[str, ...]) -> str:
@@ -130,6 +152,24 @@ def enable_windows_dpi_awareness() -> None:
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
         except Exception:
             ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+def enable_macos_ctk_scaling(root: tk.Misc) -> None:
+    """Match CustomTkinter widget scale to Retina logical DPI on macOS."""
+    if sys.platform != "darwin":
+        return
+
+    scale = ui_scale_for(root)
+    if scale <= 1.05:
+        return
+
+    try:
+        import customtkinter as ctk
+
+        ctk.set_widget_scaling(scale)
+        ctk.set_window_scaling(scale)
     except Exception:
         pass
 
@@ -219,7 +259,7 @@ def make_tooltip_label(
         borderwidth=1,
         padx=TOOLTIP_PADX,
         pady=TOOLTIP_PADY,
-        font=("Segoe UI", TYPE_MICRO),
+        font=(resolve_body_font_family(parent, ()), TYPE_MICRO),
     )
 
 

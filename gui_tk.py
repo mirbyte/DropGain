@@ -117,6 +117,7 @@ from gui_utils import (  # noqa: F401
     GuiQueueLogHandler,
     TreeviewHeadingTooltip,
     apply_hand_cursor,
+    enable_macos_ctk_scaling,
     enable_windows_dpi_awareness,
     fit_window_bounds,
     logical_screen_size,
@@ -125,6 +126,7 @@ from gui_utils import (  # noqa: F401
     pointer_inside_widget,
     position_tooltip_window,
     register_app_fonts,
+    resolve_body_font_family,
     resolve_brand_display_family,
     resolve_metric_value_family,
     resolve_ui_accent_family,
@@ -136,6 +138,7 @@ from gui_utils import (  # noqa: F401
     ui_scale_for,
     wire_ctk_button_press,
 )
+from platform_utils import open_in_file_manager
 
 GUI_TICK_MIN_INTERVAL_SEC = 0.35
 PROGRESS_TWEEN_INTERVAL_MS = 16
@@ -182,9 +185,11 @@ class App(WaveformMixin, ctk.CTk):
         super().__init__(fg_color=BG_MAIN)
 
         self._registered_font_families = register_app_fonts(self)
+        enable_macos_ctk_scaling(self)
         self._brand_display_family = resolve_brand_display_family(self, self._registered_font_families)
         self._metric_value_family = resolve_metric_value_family(self, self._registered_font_families)
         self._ui_accent_family = resolve_ui_accent_family(self, self._registered_font_families)
+        self._body_font_family = resolve_body_font_family(self, self._registered_font_families)
         self.title(APP_TITLE)
         self._last_ui_scale = ui_scale_for(self)
         self._dpi_refresh_after_id: str | None = None
@@ -646,7 +651,7 @@ class App(WaveformMixin, ctk.CTk):
             resolved = available.get(family.lower())
             if resolved:
                 return tkfont.Font(family=resolved, size=size, weight=weight or "normal")
-        return tkfont.Font(family="Segoe UI", size=size, weight=weight or "normal")
+        return tkfont.Font(family=self._body_font_family, size=size, weight=weight or "normal")
 
     def _resolve_ui_accent_tkfont(self, size: int, *, weight: str | None = None) -> tkfont.Font:
         return tkfont.Font(
@@ -838,9 +843,8 @@ class App(WaveformMixin, ctk.CTk):
     # CustomTkinter widget helpers
     # ---------------------------------------------------------------------
 
-    @staticmethod
-    def _font(size: int, weight: str | None = None) -> ctk.CTkFont:
-        return ctk.CTkFont(family="Segoe UI", size=size, weight=weight)
+    def _font(self, size: int, weight: str | None = None) -> ctk.CTkFont:
+        return ctk.CTkFont(family=self._body_font_family, size=size, weight=weight)
 
     def _brand_font(self, size: int) -> ctk.CTkFont:
         return ctk.CTkFont(family=self._brand_display_family, size=size, weight="bold")
@@ -2475,12 +2479,7 @@ class App(WaveformMixin, ctk.CTk):
             return
 
         try:
-            if os.name == "nt":
-                os.startfile(folder)  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", folder])
-            else:
-                subprocess.Popen(["xdg-open", folder])
+            open_in_file_manager(folder)
         except Exception as exc:
             messagebox.showerror("Open output folder failed", str(exc))
 
@@ -2491,12 +2490,7 @@ class App(WaveformMixin, ctk.CTk):
             return
 
         try:
-            if os.name == "nt":
-                os.startfile(csv_path)  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", csv_path])
-            else:
-                subprocess.Popen(["xdg-open", csv_path])
+            open_in_file_manager(csv_path)
         except Exception as exc:
             messagebox.showerror("Open CSV failed", str(exc))
 

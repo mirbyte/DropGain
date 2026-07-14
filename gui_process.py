@@ -13,7 +13,7 @@ from tkinter import scrolledtext, ttk
 
 import customtkinter as ctk
 
-from gui_utils import telemetry_caption
+from gui_utils import resolve_table_cell_family, telemetry_caption
 from gui_theme import (
     BG_FIELD,
     BG_MAIN,
@@ -647,7 +647,7 @@ class ProcessPage(ctk.CTkFrame):
             state="disabled",
             wrap="none",
             height=OUTPUT_LOG_LINES,
-            font=("Cascadia Mono", TYPE_MICRO),
+            font=(resolve_table_cell_family(app, app._registered_font_families), TYPE_MICRO),
             relief="flat",
             bg=LOG_BG,
             fg=FG_MAIN,

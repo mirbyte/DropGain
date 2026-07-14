@@ -138,14 +138,20 @@ UI_ACCENT_FONT_CANDIDATES = (
     "Consolas",
 )
 
-# Type scale (Segoe UI + instrument mono for numeric readouts)
+# Type scale (body UI + instrument mono for numeric readouts)
 TYPE_H1 = 15
 TYPE_BODY = 13
 TYPE_LABEL = 12
 TYPE_CAPTION = 11
 TYPE_MICRO = 10
+UI_BODY_FONT_CANDIDATES = (
+    "Segoe UI",
+    "SF Pro Text",
+    "Helvetica Neue",
+    "Helvetica",
+)
 TABLE_CELL_FONT_FAMILY = "Cascadia Mono"
-TABLE_CELL_FONT_FALLBACKS = ("Consolas", "Courier New", "Segoe UI")
+TABLE_CELL_FONT_FALLBACKS = ("Consolas", "Menlo", "Monaco", "Courier New", "Segoe UI")
 TABLE_HEADING_SIZE = TYPE_CAPTION
 TABLE_CELL_SIZE = TYPE_CAPTION
 
