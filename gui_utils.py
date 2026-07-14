@@ -926,46 +926,6 @@ def pointer_inside_widget(widget: tk.Widget) -> bool:
         return False
 
 
-def apply_card_hover_lift(
-    frame: tk.Widget,
-    *,
-    hover_border: str = ACCENT,
-    rest_border: str = BORDER_COLOR,
-) -> None:
-    """Shift a card's border to the accent color while the pointer is over it.
-
-    Uses a pointer-bbox check on a deferred callback so moving the pointer
-    onto a child widget (which fires a spurious Leave on the frame) does not
-    flicker the border back and forth.
-    """
-    if getattr(frame, "_dropgain_hover_lift_wired", False):
-        return
-    frame._dropgain_hover_lift_wired = True  # type: ignore[attr-defined]
-    state = {"hover": False}
-
-    def _apply(hover: bool) -> None:
-        if state["hover"] == hover:
-            return
-        state["hover"] = hover
-        try:
-            frame.configure(border_color=hover_border if hover else rest_border)
-        except Exception:
-            pass
-
-    def _on_enter(_event: tk.Event) -> None:
-        if pointer_inside_widget(frame):
-            _apply(True)
-
-    def _on_leave(_event: tk.Event) -> None:
-        try:
-            frame.after_idle(lambda: _apply(pointer_inside_widget(frame)))
-        except Exception:
-            _apply(False)
-
-    frame.bind("<Enter>", _on_enter, add="+")
-    frame.bind("<Leave>", _on_leave, add="+")
-
-
 def wire_ctk_button_press(
     button: tk.Widget,
     press_fg: Callable[[], str],

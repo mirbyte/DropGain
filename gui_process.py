@@ -26,7 +26,7 @@ from gui_theme import (
     FG_MAIN,
     FG_MUTED,
     ICE_FILL,
-    ICE_SOFT,
+    SUCCESS_FG,
     LOG_BG,
     METRIC_BG,
     METRIC_TILE_CORNER_RADIUS,
@@ -659,7 +659,7 @@ class ProcessPage(ctk.CTkFrame):
         )
         app.log.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         app.log.tag_config("error", foreground=ERROR_FG)
-        app.log.tag_config("good", foreground=ICE_SOFT)
+        app.log.tag_config("good", foreground=SUCCESS_FG)
         app.log.tag_config("warn", foreground=WARN_FG)
         app._show_output_tab("Waveform")
 

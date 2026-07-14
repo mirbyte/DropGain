@@ -31,7 +31,7 @@ from gui_theme import (
     TYPE_MICRO,
     WARN_FG,
 )
-from gui_utils import apply_card_hover_lift, apply_hand_cursor, ui_scale_for
+from gui_utils import apply_hand_cursor, ui_scale_for
 from analysis import (
     NORMALIZATION_MODE_LIMITER_ASSISTED,
     PEAK_CONTROL_SEVERITY_HEAVY,

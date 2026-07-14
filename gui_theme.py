@@ -123,7 +123,7 @@ BRAND_DISPLAY_FONT_CANDIDATES = (
     "Karnivore Blue",
     "Orbitron",
 )
-BRAND_WORDMARK_COLOR = ACCENT
+BRAND_WORDMARK_COLOR = FG_MAIN
 BRAND_WORDMARK_SIZE = 40
 
 # Hero numerals on process-page metric tiles (readable at large sizes)

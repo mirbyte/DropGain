@@ -1937,15 +1937,15 @@ class App(WaveformMixin, ctk.CTk):
             if not source_folder:
                 self.lbl_source_folder_status.configure(text="⚠", text_color=ERROR_FG)
             elif os.path.isdir(source_folder):
-                self.lbl_source_folder_status.configure(text="✓", text_color=ICE)
+                self.lbl_source_folder_status.configure(text="✓", text_color=SUCCESS_FG)
             else:
                 self.lbl_source_folder_status.configure(text="⚠", text_color=ERROR_FG)
         output_folder = self.var_output_folder.get().strip()
         if hasattr(self, "lbl_output_folder_status"):
             if not output_folder:
-                self.lbl_output_folder_status.configure(text="✓", text_color=ICE)
+                self.lbl_output_folder_status.configure(text="✓", text_color=SUCCESS_FG)
             elif os.path.isdir(output_folder):
-                self.lbl_output_folder_status.configure(text="✓", text_color=ICE)
+                self.lbl_output_folder_status.configure(text="✓", text_color=SUCCESS_FG)
             else:
                 self.lbl_output_folder_status.configure(text="⚠", text_color=ERROR_FG)
 
@@ -2169,7 +2169,9 @@ class App(WaveformMixin, ctk.CTk):
             elif self._active_phase == "render":
                 active_chip = "processed"
         for chip_id, tile in self._summary_metric_tiles.items():
-            tile.configure(border_color=ICE_FILL if chip_id == active_chip else BORDER_COLOR)
+            tile.configure(
+                border_color=SIGNAL_FRAME_HIGHLIGHT if chip_id == active_chip else BORDER_COLOR
+            )
 
     def _set_busy_button_label(self, pipeline: str) -> None:
         if pipeline == "batch":
