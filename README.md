@@ -263,6 +263,10 @@ For legal or compliance questions, contact the maintainer on [GitHub](https://gi
 
 <img width="3836" height="2030" alt="ui" src="https://github.com/user-attachments/assets/c404b52b-6d42-4460-9bd3-8cfd489f1397" />
 
+<br>
+
+<img width="3839" height="2070" alt="after_analysis_outputs_exist" src="https://github.com/user-attachments/assets/01383b5c-4e1f-419e-8829-3f51d646e6dc" />
+
 
 
 <img src="https://api.visitorbadge.io/api/VisitorHit?user=mirbyte&repo=DropGain&label=VIEWS&countColor=%2300b4d8" width="0" height="0" />
