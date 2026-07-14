@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import tkinter as tk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
-from analysis import hidden_subprocess_kwargs, is_limiter_processing_engine
+from analysis import hidden_subprocess_kwargs, is_limiter_processing_engine, parse_optional_float
 from gui_decor import (
     draw_corner_brackets,
     draw_inset_frame,
@@ -261,8 +261,6 @@ class WaveformMixin:
         if duration <= 0.0:
             duration = duration_from_audio
 
-        # Preview-only RMS loudness curve, not pyloudnorm metering. Calibrated so the
-        # highlighted section aligns roughly with measured section LUFS for the UI.
         audio_for_rms = np.frombuffer(stdout, dtype=np.float32)
         audio_for_rms = np.nan_to_num(audio_for_rms, nan=0.0, posinf=0.0, neginf=0.0)
         if audio_for_rms.size < padded_size:
@@ -276,22 +274,21 @@ class WaveformMixin:
             kernel = np.ones(smooth_points, dtype=np.float64) / float(smooth_points)
             rms = np.convolve(rms, kernel, mode="same")
 
-        max_rms = float(rms.max(initial=0.0))
-        rms_envelope = rms.copy()
-        if max_rms > 0.0 and math.isfinite(max_rms):
-            rms_envelope = rms_envelope / max_rms
-
         band_low, band_mid, band_high = self._compute_frequency_band_envelopes(rms_blocks)
 
-        rms_db = 20.0 * np.log10(np.maximum(rms, 1.0e-8))
-        loudest_section_lufs = self._optional_float(row.get("loudest_section_lufs"))
         section_start = self._optional_float(row.get("loudest_section_start_sec"))
         section_end = self._optional_float(row.get("loudest_section_end_sec"))
         gain_db = self._optional_float(row.get("suggested_gain_db")) or 0.0
+        scan_window_seconds = self._optional_float(row.get("loudness_scan_window_seconds"))
+        scan_hop_seconds = self._optional_float(row.get("loudness_scan_hop_seconds"))
 
-        loudness_curve_lufs: list[float] = []
+        window_curve = self._parse_loudness_window_curve(row.get("loudness_window_curve"))
+        loudness_curve_lufs = self._interpolate_loudness_curve(window_curve, duration, point_count)
+
         projected_loudness_curve_lufs: list[float] = []
-        if loudest_section_lufs is not None and rms_db.size > 0:
+        loudest_section_lufs = self._optional_float(row.get("loudest_section_lufs"))
+        if loudest_section_lufs is not None and rms.size > 0:
+            rms_db = 20.0 * np.log10(np.maximum(rms, 1.0e-8))
             if duration > 0.0 and section_start is not None and section_end is not None and section_end > section_start:
                 idx1 = max(0, min(point_count - 1, int((section_start / duration) * point_count)))
                 idx2 = max(idx1 + 1, min(point_count, int(math.ceil((section_end / duration) * point_count))))
@@ -301,26 +298,29 @@ class WaveformMixin:
 
             if math.isfinite(reference_db):
                 calibrated = (rms_db - reference_db) + float(loudest_section_lufs)
-                projected = calibrated + float(gain_db)
-                loudness_curve_lufs = [float(v) for v in calibrated.tolist()]
-                projected_loudness_curve_lufs = [float(v) for v in projected.tolist()]
+                projected_loudness_curve_lufs = [
+                    float(value)
+                    for value in (calibrated + float(gain_db)).tolist()
+                    if math.isfinite(float(value))
+                ]
 
         return {
             "filename": str(row.get("filename", "") or os.path.basename(path)),
             "path": path,
             "duration_sec": duration,
             "envelope": [float(v) for v in envelope.tolist()],
-            "rms_envelope": [float(v) for v in rms_envelope.tolist()],
             "band_low": [float(v) for v in band_low.tolist()],
             "band_mid": [float(v) for v in band_mid.tolist()],
             "band_high": [float(v) for v in band_high.tolist()],
             "loudness_curve_lufs": loudness_curve_lufs,
             "projected_loudness_curve_lufs": projected_loudness_curve_lufs,
+            "loudness_scan_window_seconds": scan_window_seconds,
+            "loudness_scan_hop_seconds": scan_hop_seconds,
             "target_low_lufs": self._optional_float(row.get("target_low_lufs")),
             "target_high_lufs": self._optional_float(row.get("target_high_lufs")),
             "loudest_section_start_sec": section_start,
             "loudest_section_end_sec": section_end,
-            "suggested_gain_db": row.get("suggested_gain_db"),
+            "suggested_gain_db": gain_db,
             "loudest_section_lufs": row.get("loudest_section_lufs"),
             "projected_loudest_section_lufs": row.get("projected_loudest_section_lufs"),
             "true_peak_dbtp": row.get("true_peak_dbtp"),
@@ -328,6 +328,105 @@ class WaveformMixin:
             "estimated_peak_control_db": row.get("estimated_peak_control_db"),
             "processing_engine": row.get("processing_engine"),
         }
+
+    @staticmethod
+    def _parse_lufs_curve_values(raw: object) -> list[float]:
+        if not isinstance(raw, (list, tuple)):
+            return []
+        try:
+            return [
+                float(value)
+                for value in raw
+                if math.isfinite(float(value))
+            ]
+        except Exception:
+            return []
+
+    @staticmethod
+    def _lufs_curve_points(
+        values: list[float],
+        plot_left: float,
+        plot_width: float,
+        y_for_lufs,
+    ) -> list[tuple[float, float]]:
+        if not values:
+            return []
+        last_index = max(1, len(values) - 1)
+        return [
+            (
+                plot_left + ((float(index) / float(last_index)) * plot_width),
+                y_for_lufs(float(value)),
+            )
+            for index, value in enumerate(values)
+        ]
+
+    @staticmethod
+    def _format_loudness_scan_label(window_seconds: object, hop_seconds: object) -> str:
+        window = parse_optional_float(window_seconds)
+        hop = parse_optional_float(hop_seconds)
+        if window is None or hop is None:
+            return "LUFS scan"
+        return f"{window:g}s / {hop:g}s scan"
+
+    @staticmethod
+    def _parse_loudness_window_curve(value: object) -> list[tuple[float, float, float]]:
+        if not isinstance(value, (list, tuple)):
+            return []
+
+        parsed: list[tuple[float, float, float]] = []
+        for item in value:
+            if isinstance(item, (list, tuple)) and len(item) >= 3:
+                start_sec = parse_optional_float(item[0])
+                end_sec = parse_optional_float(item[1])
+                lufs = parse_optional_float(item[2])
+            elif isinstance(item, dict):
+                start_sec = parse_optional_float(item.get("start_sec"))
+                end_sec = parse_optional_float(item.get("end_sec"))
+                lufs = parse_optional_float(item.get("lufs"))
+            else:
+                continue
+
+            if (
+                start_sec is None
+                or end_sec is None
+                or lufs is None
+                or end_sec <= start_sec
+            ):
+                continue
+
+            parsed.append((start_sec, end_sec, lufs))
+
+        return parsed
+
+    @staticmethod
+    def _interpolate_loudness_curve(
+        window_curve: list[tuple[float, float, float]],
+        duration: float,
+        point_count: int,
+    ) -> list[float]:
+        if not window_curve or duration <= 0.0 or point_count <= 0:
+            return []
+
+        import numpy as np
+
+        centers = np.array(
+            [(start + end) / 2.0 for start, end, _ in window_curve],
+            dtype=np.float64,
+        )
+        values = np.array([lufs for _, _, lufs in window_curve], dtype=np.float64)
+        if centers.size == 0 or values.size == 0:
+            return []
+
+        order = np.argsort(centers)
+        centers = centers[order]
+        values = values[order]
+
+        if centers.size == 1:
+            return [float(values[0])] * point_count
+
+        sample_times = (np.arange(point_count, dtype=np.float64) + 0.5) * (duration / float(point_count))
+        interpolated = np.interp(sample_times, centers, values)
+        return [float(value) for value in interpolated.tolist()]
 
     @staticmethod
     def _format_time_short(seconds: object) -> str:
@@ -378,9 +477,18 @@ class WaveformMixin:
             range_text = "time range unavailable"
 
         lufs_text = self._format_lufs(preview.get("loudest_section_lufs"))
+        scan_window = self._optional_float(preview.get("loudness_scan_window_seconds"))
+        scan_hop = self._optional_float(preview.get("loudness_scan_hop_seconds"))
+        scan_note = ""
+        if scan_window is not None and scan_hop is not None:
+            scan_note = (
+                f"\nFull-track {scan_window:g}s window / {scan_hop:g}s hop scan; "
+                "highlight marks the loudest window."
+            )
         return (
             f"Loudest section ({range_text}).\n"
             f"DropGain measured {lufs_text} integrated LUFS here to set gain."
+            f"{scan_note}"
         )
 
     def _hide_waveform_hover_tip(self) -> None:
@@ -569,8 +677,6 @@ class WaveformMixin:
         *,
         preview: dict[str, object],
         layout: dict[str, object],
-        loudness_curve: list[float],
-        curve_points: list[tuple[float, float]],
     ) -> None:
         plot_left = float(layout["plot_left"])
         plot_right = float(layout["plot_right"])
@@ -610,22 +716,48 @@ class WaveformMixin:
                 anchor="rt",
             )
 
-        if len(curve_points) >= 2:
-            last_x, last_y = curve_points[-1]
-            projected_font = self._waveform_pil_font(WAVEFORM_FONT_VALUE_BASE)
-            projected_xy = (
-                min(plot_right - 8 * ui_scale, last_x),
-                max(plot_top + 10 * ui_scale, min(plot_bottom - 10 * ui_scale, last_y)),
-            )
+        legend_font = self._waveform_pil_font(WAVEFORM_FONT_VALUE_BASE)
+        scan_curve = self._parse_lufs_curve_values(preview.get("loudness_curve_lufs"))
+        if scan_curve:
             self._draw_waveform_text_badge(
                 draw,
-                projected_xy,
-                "projected",
-                projected_font,
-                text_color=self._hex_rgba(WAVEFORM_CURVE),
-                anchor="rm",
+                (plot_left + 8 * ui_scale, plot_bottom - 8 * ui_scale),
+                self._format_loudness_scan_label(
+                    preview.get("loudness_scan_window_seconds"),
+                    preview.get("loudness_scan_hop_seconds"),
+                ),
+                legend_font,
+                text_color=self._hex_rgba(ICE_SOFT),
+                anchor="lb",
                 ui_scale=ui_scale,
             )
+
+        projected_curve = self._parse_lufs_curve_values(preview.get("projected_loudness_curve_lufs"))
+        y_for_lufs = layout.get("y_for_lufs")
+        plot_width = float(layout.get("plot_width") or 0.0)
+        if projected_curve and callable(y_for_lufs) and plot_width > 0.0:
+            projected_points = self._lufs_curve_points(
+                projected_curve,
+                plot_left,
+                plot_width,
+                y_for_lufs,
+            )
+            if len(projected_points) >= 2:
+                last_x, last_y = projected_points[-1]
+                projected_font = self._waveform_pil_font(WAVEFORM_FONT_VALUE_BASE)
+                projected_xy = (
+                    min(plot_right - 8 * ui_scale, last_x),
+                    max(plot_top + 10 * ui_scale, min(plot_bottom - 10 * ui_scale, last_y)),
+                )
+                self._draw_waveform_text_badge(
+                    draw,
+                    projected_xy,
+                    "projected",
+                    projected_font,
+                    text_color=self._hex_rgba(WAVEFORM_CURVE),
+                    anchor="rm",
+                    ui_scale=ui_scale,
+                )
 
         if highlight is not None:
             x1, x2 = highlight  # type: ignore[misc]
@@ -877,19 +1009,11 @@ class WaveformMixin:
         plot_bottom = max(plot_top + s(24), float(render_height) - s(2.0))
         plot_height = max(1.0, plot_bottom - plot_top)
 
-        loudness_raw = (
+        loudness_scan_curve = self._parse_lufs_curve_values(preview.get("loudness_curve_lufs"))
+        projected_loudness_curve = self._parse_lufs_curve_values(
             preview.get("projected_loudness_curve_lufs")
-            or preview.get("loudness_curve_lufs")
-            or []
         )
-        try:
-            loudness_curve = [
-                float(value)
-                for value in loudness_raw  # type: ignore[union-attr]
-                if math.isfinite(float(value))
-            ]
-        except Exception:
-            loudness_curve = []
+        loudness_curve = projected_loudness_curve or loudness_scan_curve
 
         def percentile(values: list[float], fraction: float) -> float:
             if not values:
@@ -900,10 +1024,13 @@ class WaveformMixin:
 
         lufs_min: float | None = None
         lufs_max: float | None = None
-        if loudness_curve:
-            useful_curve = [value for value in loudness_curve if value > -60.0]
+        bounds_values: list[float] = []
+        bounds_values.extend(loudness_scan_curve)
+        bounds_values.extend(projected_loudness_curve)
+        if bounds_values:
+            useful_curve = [value for value in bounds_values if value > -60.0]
             if not useful_curve:
-                useful_curve = loudness_curve
+                useful_curve = bounds_values
             bounds = [percentile(useful_curve, 0.05), percentile(useful_curve, 0.95)]
             if target_low is not None:
                 bounds.append(float(target_low))
@@ -1035,15 +1162,19 @@ class WaveformMixin:
             if len(peak_polygon) >= 3:
                 draw.polygon(peak_polygon, fill=self._hex_rgba(WAVEFORM_PEAK_FILL, 150))
 
-        curve_points: list[tuple[float, float]] = []
-        curve_points_1x: list[tuple[float, float]] = []
-        if loudness_curve and lufs_min is not None and lufs_max is not None:
-            last_loudness_index = max(1, len(loudness_curve) - 1)
-            for index, value in enumerate(loudness_curve):
-                x = plot_left + ((float(index) / float(last_loudness_index)) * plot_width)
-                x_1x = plot_left_1x + ((float(index) / float(last_loudness_index)) * plot_width_1x)
-                curve_points.append((x, y_for_lufs(value)))
-                curve_points_1x.append((x_1x, y_for_lufs_1x(value)))
+        scan_points = self._lufs_curve_points(
+            loudness_scan_curve,
+            plot_left,
+            plot_width,
+            y_for_lufs,
+        )
+        projected_points = self._lufs_curve_points(
+            projected_loudness_curve,
+            plot_left,
+            plot_width,
+            y_for_lufs,
+        )
+        curve_points = projected_points if projected_points else scan_points
 
         peak_control = self._optional_float(preview.get("estimated_peak_control_db"))
         processing_engine = str(preview.get("processing_engine") or "")
@@ -1073,8 +1204,20 @@ class WaveformMixin:
                         fill=self._hex_rgba(WAVEFORM_LIMITER_ZONE, 180),
                     )
 
-        if len(curve_points) >= 2:
-            draw.line(curve_points, fill=self._hex_rgba(WAVEFORM_CURVE), width=energy_width, joint="curve")
+        if len(scan_points) >= 2:
+            draw.line(
+                scan_points,
+                fill=self._hex_rgba(ICE_SOFT),
+                width=energy_width,
+                joint="curve",
+            )
+        if len(projected_points) >= 2:
+            draw.line(
+                projected_points,
+                fill=self._hex_rgba(WAVEFORM_CURVE),
+                width=energy_width,
+                joint="curve",
+            )
 
         if highlight is not None:
             x1, x2 = highlight
@@ -1147,8 +1290,6 @@ class WaveformMixin:
             height,
             preview=preview,
             layout=layout,
-            loudness_curve=loudness_curve,
-            curve_points=curve_points_1x,
         )
         return img
 

@@ -3083,6 +3083,7 @@ def verify_processed_audio_fast(
                 output_loudest_section_lufs,
                 output_loudest_section_start_sec,
                 output_loudest_section_end_sec,
+                _output_loudness_window_curve,
             ) = loudest_section_lufs(
                 audio=output_audio,
                 meter=meter,

@@ -1323,14 +1323,20 @@ def measure_lufs(meter: pyln.Meter, audio: np.ndarray) -> float:
     return measure_lufs_input(meter, audio_for_loudness_meter(audio))
 
 
+LoudnessWindowPoint = tuple[float, float, float]
+
+
 def loudest_section_lufs(
     audio: np.ndarray,
     meter: pyln.Meter,
     window_seconds: float,
     hop_seconds: float,
     meter_input: np.ndarray | None = None,
-) -> tuple[float, float, float]:
-    """Find the loudest window of audio using integrated LUFS and a sliding hop."""
+) -> tuple[float, float, float, list[LoudnessWindowPoint]]:
+    """Find the loudest window of audio using integrated LUFS and a sliding hop.
+
+    Also returns every scanned window as (start_sec, end_sec, lufs) for UI preview.
+    """
     sample_count = audio.shape[0]
     meter_data = audio_for_loudness_meter(audio) if meter_input is None else meter_input
 
@@ -1342,7 +1348,8 @@ def loudest_section_lufs(
 
     if sample_count <= window_samples:
         lufs = measure_lufs_input(meter, meter_data)
-        return lufs, 0.0, sample_count / METER_SAMPLE_RATE
+        end_sec = sample_count / METER_SAMPLE_RATE
+        return lufs, 0.0, end_sec, [(0.0, end_sec, lufs)]
 
     final_start = sample_count - window_samples
     starts = list(range(0, final_start + 1, hop_samples))
@@ -1352,6 +1359,7 @@ def loudest_section_lufs(
     window_ranges = [(start, start + window_samples) for start in starts]
     best_lufs: float | None = None
     best_start = 0
+    window_curve: list[LoudnessWindowPoint] = []
 
     for start, end in window_ranges:
         try:
@@ -1359,18 +1367,23 @@ def loudest_section_lufs(
         except Exception:
             continue
 
+        start_sec = start / METER_SAMPLE_RATE
+        end_sec = end / METER_SAMPLE_RATE
+        window_curve.append((start_sec, end_sec, value))
+
         if best_lufs is None or value > best_lufs:
             best_lufs = value
             best_start = start
 
     if best_lufs is None:
         lufs = measure_lufs_input(meter, meter_data)
-        return lufs, 0.0, sample_count / METER_SAMPLE_RATE
+        end_sec = sample_count / METER_SAMPLE_RATE
+        return lufs, 0.0, end_sec, [(0.0, end_sec, lufs)]
 
     start_sec = best_start / METER_SAMPLE_RATE
     end_sec = (best_start + window_samples) / METER_SAMPLE_RATE
 
-    return best_lufs, start_sec, end_sec
+    return best_lufs, start_sec, end_sec, window_curve
 
 
 
@@ -1995,7 +2008,7 @@ def analyze_file(
         integrated = measure_lufs_input(meter, meter_input)
 
     with benchmark_timer("loudest-section scan"):
-        loudest, section_start, section_end = loudest_section_lufs(
+        loudest, section_start, section_end, loudness_window_curve = loudest_section_lufs(
             audio=audio,
             meter=meter,
             window_seconds=loud_window_seconds,
@@ -2151,6 +2164,9 @@ def analyze_file(
         "decision_notes": decision.decision_notes,
         "true_peak_unreliable": decision.true_peak_unreliable,
         "manual_check_required": decision.manual_check_required,
+        "loudness_window_curve": loudness_window_curve,
+        "loudness_scan_window_seconds": float(loud_window_seconds),
+        "loudness_scan_hop_seconds": float(loud_hop_seconds),
     }
 
 
