@@ -51,6 +51,14 @@ def telemetry_caption(text: str) -> str:
     return f"// {stripped}"
 
 
+def telemetry_plain(text: str) -> str:
+    """Strip a console-style telemetry marker when present."""
+    stripped = text.strip()
+    if stripped.startswith("// "):
+        return stripped[3:].strip()
+    return stripped
+
+
 def _fonts_directory() -> Path:
     return Path(__file__).resolve().parent / "fonts"
 

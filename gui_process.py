@@ -474,7 +474,7 @@ class ProcessPage(ctk.CTkFrame):
             size=TYPE_BODY,
             weight="bold",
             anchor="w",
-            mono=True,
+            accent=True,
         ).grid(row=0, column=0, sticky="w")
         app._label(
             header_row,

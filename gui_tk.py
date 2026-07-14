@@ -133,6 +133,7 @@ from gui_utils import (  # noqa: F401
     scaled_px,
     scaled_px_from_float,
     telemetry_caption,
+    telemetry_plain,
     treeview_column_width_px,
     treeview_rowheight_px,
     ui_scale_for,
@@ -778,15 +779,13 @@ class App(WaveformMixin, ctk.CTk):
             return
         if self._is_run_busy():
             if self._operation_started_at is not None:
-                message = telemetry_caption(
-                    self._operation_stats_text(
-                        self._operation_last_rate,
-                        self._operation_last_eta,
-                        self._operation_last_errors,
-                    )
+                message = self._operation_stats_text(
+                    self._operation_last_rate,
+                    self._operation_last_eta,
+                    self._operation_last_errors,
                 )
             else:
-                message = self.var_status.get().strip() or RESULTS_EMPTY_PLACEHOLDER
+                message = telemetry_plain(self.var_status.get()) or RESULTS_EMPTY_PLACEHOLDER
             self.var_results_empty.set(message)
             return
         self.var_results_empty.set(RESULTS_EMPTY_PLACEHOLDER)
