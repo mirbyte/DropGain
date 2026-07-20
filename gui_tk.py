@@ -47,7 +47,7 @@ except ImportError as exc:
     ) from exc
 
 from analysis import (
-    APP_TITLE,
+    APP_WINDOW_TITLE,
     DEFAULT_BOOST_PEAK_CEILING_DBFS,
     DEFAULT_LIMITER_ENGINE,
     DEFAULT_LOUD_SECTION_HOP_SECONDS,
@@ -191,7 +191,7 @@ class App(WaveformMixin, ctk.CTk):
         self._metric_value_family = resolve_metric_value_family(self, self._registered_font_families)
         self._ui_accent_family = resolve_ui_accent_family(self, self._registered_font_families)
         self._body_font_family = resolve_body_font_family(self, self._registered_font_families)
-        self.title(APP_TITLE)
+        self.title(APP_WINDOW_TITLE)
         self._last_ui_scale = ui_scale_for(self)
         self._dpi_refresh_after_id: str | None = None
         self._app_icon: ImageTk.PhotoImage | None = None
@@ -2302,9 +2302,9 @@ class App(WaveformMixin, ctk.CTk):
 
         fraction_text = self._operation_fraction_text()
         if fraction_text:
-            self.title(f"{APP_TITLE} — {self._operation_phase_label()} ({fraction_text})")
+            self.title(f"{APP_WINDOW_TITLE} - {self._operation_phase_label()} ({fraction_text})")
         elif self._active_phase != "idle":
-            self.title(f"{APP_TITLE} — {self._operation_phase_label()}")
+            self.title(f"{APP_WINDOW_TITLE} - {self._operation_phase_label()}")
 
     def _reset_operation_chrome(self) -> None:
         self._active_pipeline = None
@@ -2328,7 +2328,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_operation_fraction.set("")
         self._set_progress_bars(0.0, immediate=True)
         self._update_metric_phase_highlight()
-        self.title(APP_TITLE)
+        self.title(APP_WINDOW_TITLE)
         self._update_results_empty_state(has_rows=bool(self._analyzed_rows))
 
     def _begin_operation_run(self, pipeline: str, initial_status: str) -> None:
@@ -2722,7 +2722,7 @@ class App(WaveformMixin, ctk.CTk):
             "analyze_only": "analyze library",
             "review_render": "render analyzed",
         }[pipeline]
-        self._logger.info(APP_TITLE)
+        self._logger.info(APP_WINDOW_TITLE)
         self._logger.info("-" * 78)
         self._logger.info("Mode:   %s", mode_text)
         self._logger.info("Gain:   %s", normalization_mode)
