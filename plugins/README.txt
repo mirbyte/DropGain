@@ -4,10 +4,9 @@ DropGain local VST3 plugins (optional)
 You do not need to use this folder. DropGain finds limiter plugins in the
 normal system VST3 locations, or via PROL2_PLUGIN_PATH / LOUDMAX_PLUGIN_PATH.
 
-This folder is only a convenience if you want a plugin sitting next to the app
-instead of installing it system-wide. DropGain checks here before the standard
-VST3 directories (next to main.pyw when running from source, or next to
-DropGain.exe in a packaged build).
+This folder is only a convenience if you want a plugin beside the app
+instead of installing it system-wide. DropGain checks this folder first,
+before the standard VST3 directories. Put the .vst3 file in here.
 
 Optional: LoudMax
 -----------------
