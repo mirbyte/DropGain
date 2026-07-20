@@ -13,3 +13,5 @@ FFmpeg is already in the bin folder. You do not need to install it separately.
 
 Analysis and clean-gain render work without LoudMax. Limiter-assisted mode
 needs LoudMax or FabFilter Pro-L 2.
+
+More: https://dropgain.app
