@@ -1,9 +1,8 @@
 [![License](https://img.shields.io/github/license/mirbyte/DropGain?color=00b4d8&maxAge=604800)](https://github.com/mirbyte/DropGain/blob/main/LICENSE)
 ![Size](https://img.shields.io/github/repo-size/mirbyte/DropGain?label=size&color=00b4d8&maxAge=86400)
 ![LastCommit](https://img.shields.io/github/last-commit/mirbyte/DropGain?color=00b4d8&label=repo+updated)
+[![Download Count](https://img.shields.io/github/downloads/mirbyte/DropGain/total?color=00b4d8&maxAge=86400)](https://github.com/mirbyte/DropGain/releases)
 ![Views](https://hits.sh/github.com/mirbyte/DropGain.svg?color=00b4d8&label=views)
-
-<!-- release downloads [![Download Count](https://img.shields.io/github/downloads/mirbyte/DropGain/total?color=00b4d8&maxAge=86400)](https://github.com/mirbyte/DropGain/releases) -->
 
 # DropGain
 
