@@ -71,7 +71,7 @@ Narrower than most commercial library tools on purpose: level and peak control, 
 - Want one integrated app for library management, analysis, and decks with minimal setup
 - Want clipped-peak repair, warmth, saturation, or template-style enhancement without tuning
 - Need polished vendor support and broad cross-platform QA
-- Do not want to install FFmpeg, Python, or (for full peak-limited prep) a limiter plugin (FabFilter Pro-L 2 or the free LoudMax)
+- Do not want any setup at all, including (for full peak-limited prep) a limiter plugin (FabFilter Pro-L 2 or the free LoudMax). A packaged Windows build ships FFmpeg; limiter-assisted mode still needs a VST3.
 
 Commercial DJ and prep tools are often the better fit for convenience, integration, and breadth. DropGain is an alternative when your workflow cares more about explicit targets, render-stage control, and a transparent path than about all-in-one polish.
 
@@ -228,11 +228,21 @@ Load `_DG` copies (or your output folder) into the library you play from, not un
 
 ### Dependencies and launch
 
-- **FFmpeg / ffprobe** - on `PATH`
-- A limiter VST3 for limiter-assisted mode, selected in **Preferences → Limiter engine**: **FabFilter Pro-L 2** (`PROL2_PLUGIN_PATH` or auto-discovery from the system VST3 folder) or **LoudMax**, free (`LOUDMAX_PLUGIN_PATH` or auto-discovery). Optionally, copy the LoudMax `.vst3` into the app-local `plugins` folder instead of installing system-wide; see `plugins/README.txt`.
-- **Python** - `customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`
+**Packaged Windows build** (`release/DropGain/` from `python build.py`):
+
+- Run `DropGain.exe`. FFmpeg / ffprobe ship in the app `bin/` folder (no PATH install).
+- Limiter-assisted mode still needs a VST3: **LoudMax** (free; drop into `plugins/` next to the exe, or system VST3 folder) or **FabFilter Pro-L 2**. See `plugins/README.txt` and `FIRST_RUN.txt` in the release folder.
+- Analysis and clean-gain render work without a limiter plugin.
+
+**From source:**
+
+- **FFmpeg / ffprobe** on `PATH`, or in a `bin/` folder next to the app (same layout as the packaged build)
+- Python deps: `pip install -r requirements.txt` (`customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`)
+- Limiter VST3 as above (`PROL2_PLUGIN_PATH` / `LOUDMAX_PLUGIN_PATH` or auto-discovery)
 
 Launch `main.pyw`. **Preferences → Check Limiter / System** validates the toolchain before batch render.
+
+**Building a Windows release:** put an LGPL FFmpeg essentials tree in `third_party/ffmpeg/` (see `third_party/ffmpeg/README.DropGain.txt`), then `pip install -r requirements-build.txt` and `python build.py` (optional `--zip`). Output is `release/DropGain/` with `bin/`, `plugins/`, and `licenses/`.
 
 ### Code layout
 
@@ -249,6 +259,7 @@ Launch `main.pyw`. **Preferences → Check Limiter / System** validates the tool
 | `analysis.py` | Measurement, gain logic, discovery, CSV schema |
 | `processing.py` | Render paths, limiter (Pro-L 2 / LoudMax) host, metadata |
 | `jobs.py` | Analyze / render / batch jobs, worker pools |
+| `build.py` | Windows onedir release assembly (PyInstaller + bundled FFmpeg) |
 | `optimizer.py` | Library profiling, settings recommendations |
 
 UI invokes `jobs.py`; work runs on background threads with queue-based progress.

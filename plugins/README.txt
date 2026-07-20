@@ -6,7 +6,8 @@ normal system VST3 locations, or via PROL2_PLUGIN_PATH / LOUDMAX_PLUGIN_PATH.
 
 This folder is only a convenience if you want a plugin sitting next to the app
 instead of installing it system-wide. DropGain checks here before the standard
-VST3 directories.
+VST3 directories (next to main.pyw when running from source, or next to
+DropGain.exe in a packaged build).
 
 Optional: LoudMax
 -----------------

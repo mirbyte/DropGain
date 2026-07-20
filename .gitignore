@@ -15,10 +15,15 @@ ENV/
 # Packaging / build
 build/
 dist/
+release/
 *.egg-info/
 *.egg
 pip-wheel-metadata/
 *.vst3
+
+# Bundled FFmpeg extract (keep DropGain's note only)
+third_party/ffmpeg/**
+!third_party/ffmpeg/README.DropGain.txt
 
 # Test / lint / type tools
 .pytest_cache/

@@ -101,6 +101,7 @@ from analysis import (
     ffprobe_audio_info,
     flac_sample_fmt_to_use,
     hidden_subprocess_kwargs,
+    script_folder,
     infer_bit_depth,
     loudest_section_lufs,
     min_abs_gain_for_extension,
@@ -2069,7 +2070,7 @@ def shutdown_prol2_render_host(*, wait: bool = True) -> None:
 
 def common_vst3_roots() -> list[Path]:
     """Return the app-local and standard VST3 plugin directories."""
-    roots: list[Path] = [Path(__file__).resolve().parent / "plugins"]
+    roots: list[Path] = [script_folder() / "plugins"]
     if os.name == "nt":
         program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
         roots.append(Path(program_files) / "Common Files" / "VST3")

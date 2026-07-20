@@ -1,0 +1,15 @@
+DropGain
+========
+
+1. Run DropGain.exe
+2. Pick a folder of tracks and Analyze / Render
+3. Optional peak limiting: download LoudMax VST3 (free) from
+   https://loudmax.blogspot.com/
+   Put LoudMax.vst3 in the plugins folder next to this file, then choose
+   LoudMax under Preferences > Limiter engine
+4. Preferences > Check Limiter / System to verify ffmpeg and the limiter
+
+FFmpeg is already in the bin folder. You do not need to install it separately.
+
+Analysis and clean-gain render work without LoudMax. Limiter-assisted mode
+needs LoudMax or FabFilter Pro-L 2.

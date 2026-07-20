@@ -440,6 +440,25 @@ def script_folder() -> Path:
     return Path(__file__).resolve().parent
 
 
+def bundled_bin_dir() -> Path:
+    """Return the app-local bin folder (ffmpeg/ffprobe for packaged builds)."""
+    return script_folder() / "bin"
+
+
+def ensure_bundled_bin_on_path() -> None:
+    """Prepend script_folder()/bin to PATH so bundled ffmpeg/ffprobe resolve."""
+    bin_dir = bundled_bin_dir()
+    if not bin_dir.is_dir():
+        return
+    bin_str = str(bin_dir.resolve())
+    current = os.environ.get("PATH", "")
+    parts = [p for p in current.split(os.pathsep) if p]
+    if parts and parts[0] == bin_str:
+        return
+    parts = [p for p in parts if p != bin_str]
+    os.environ["PATH"] = os.pathsep.join([bin_str, *parts])
+
+
 def default_csv_path(folder: str | None = None) -> str:
     """Return the default path for the CSV report next to the executable/script.
 
@@ -564,6 +583,8 @@ def hidden_subprocess_kwargs() -> dict[str, int]:
 
 def check_ffmpeg_available() -> None:
     """Raise RuntimeError if ffmpeg or ffprobe is not found in PATH."""
+    ensure_bundled_bin_on_path()
+    bin_hint = bundled_bin_dir()
     for tool in ("ffmpeg", "ffprobe"):
         try:
             subprocess.run(
@@ -575,7 +596,8 @@ def check_ffmpeg_available() -> None:
             )
         except Exception as exc:
             raise RuntimeError(
-                f"{tool} was not found in PATH. Make sure ffmpeg and ffprobe are available."
+                f"{tool} was not found. Install FFmpeg on PATH, or place "
+                f"{tool}.exe in:\n{bin_hint}"
             ) from exc
 
 

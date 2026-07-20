@@ -60,7 +60,13 @@ def telemetry_plain(text: str) -> str:
 
 
 def _fonts_directory() -> Path:
-    return Path(__file__).resolve().parent / "fonts"
+    """Return fonts next to this module, or next to the frozen executable."""
+    beside_module = Path(__file__).resolve().parent / "fonts"
+    if beside_module.is_dir():
+        return beside_module
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "fonts"
+    return beside_module
 
 
 def _register_font_file(root: tk.Misc, path: Path) -> tuple[str, ...]:
