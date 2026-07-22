@@ -37,7 +37,7 @@ except ImportError as exc:
 
 
 APP_TITLE = "DropGain"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 APP_WINDOW_TITLE = f"{APP_TITLE} v{APP_VERSION}"
 
 METER_SAMPLE_RATE = 48_000  # ITU-R BS.1770-4 specifies 48 kHz for loudness measurement.
