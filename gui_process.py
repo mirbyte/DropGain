@@ -200,6 +200,9 @@ class ProcessPage(ctk.CTkFrame):
         settings = self._metrics_settings
         column = self._metrics_column
 
+        # Always grid inside metrics_column. Mixing pack/grid on the same
+        # parent raises TclError when the dashboard switches modes (common at
+        # frozen launch when the first measured width is still compact/stacked).
         bubbles.pack_forget()
         settings.pack_forget()
         bubbles.grid_forget()
@@ -218,8 +221,14 @@ class ProcessPage(ctk.CTkFrame):
             return
 
         column.grid_rowconfigure(1, weight=0)
-        bubbles.pack()
-        settings.pack(pady=(PROCESS_SETTINGS_ROW_PADY, 0))
+        column.grid_columnconfigure(0, weight=1)
+        bubbles.grid(row=0, column=0, sticky="n")
+        settings.grid(
+            row=1,
+            column=0,
+            sticky="n",
+            pady=(PROCESS_SETTINGS_ROW_PADY, 0),
+        )
 
     def _apply_dashboard_layout(self, mode: str) -> None:
         folder = self._folder_block
