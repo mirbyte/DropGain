@@ -1386,7 +1386,12 @@ class App(WaveformMixin, ctk.CTk):
         self._update_summary_cards(force=True)
         if self._analyzed_rows and hasattr(self, "results_table"):
             self._sync_results_table_rows(self._analyzed_rows)
-        self._apply_idle_state_controls()
+        # Progress ticks mark visuals dirty while Preferences is open; leaving
+        # must not wipe in-flight operation chrome back to Ready.
+        if self._is_run_busy():
+            self._set_busy_state()
+        else:
+            self._apply_idle_state_controls()
 
     def _refresh_settings_summary(self, *, force: bool = False) -> None:
         try:
@@ -1570,6 +1575,8 @@ class App(WaveformMixin, ctk.CTk):
                     self._resize_results_table_columns()
                 except Exception:
                     pass
+            if self._is_run_busy():
+                self._set_busy_state()
 
         elif name == "library" and self.library_tuning_page is not None:
             try:
@@ -2029,6 +2036,10 @@ class App(WaveformMixin, ctk.CTk):
         self._update_window_cursor()
 
     def _apply_idle_state_controls(self) -> None:
+        if self._is_run_busy():
+            self._set_busy_state()
+            return
+
         self._set_run_controls_state("normal")
         self._apply_action_button_state(self.btn_batch, "normal")
         self._apply_action_button_state(self.btn_analyze_only, "normal")
