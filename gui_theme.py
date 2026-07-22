@@ -103,7 +103,6 @@ HOVER_TWEEN_STEPS = 6
 TAB_HOVER_TWEEN_MS = HOVER_TWEEN_MS
 TAB_HOVER_TWEEN_STEPS = HOVER_TWEEN_STEPS
 CURSOR_POINTER = "hand2"
-CURSOR_BUSY = "watch"
 CARD_CORNER_RADIUS = 6
 
 # Signal-console surface treatment (muted cyber; used in PIL-rendered surfaces)

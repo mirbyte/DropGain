@@ -1201,7 +1201,9 @@ class App(WaveformMixin, ctk.CTk):
         button.bind("<Leave>", _on_leave, add="+")
 
     def _update_window_cursor(self) -> None:
-        desired = CURSOR_BUSY if self._is_run_busy() else ""
+        # Keep the normal pointer during runs: the UI stays interactive (Cancel,
+        # navigation, etc.), and a watch cursor reads as "frozen".
+        desired = ""
         if getattr(self, "_dropgain_cursor", None) == desired:
             return
         try:
