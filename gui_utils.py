@@ -6,6 +6,7 @@ import logging
 import os
 import queue
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -642,10 +643,10 @@ class ContentFadeTransition:
     PEAK_ALPHA = 1.0
     STEP_MS = 14
     GLITCH_STEPS = 24
-    SWAP_STEP = 13
     FADE_IN_STEPS = 4
     FADE_OUT_STEPS = 12
     SETTLE_MS = 150
+    LINE_FADE_IN_SEC = 0.09
     EDGE_BLEED = 3
     FINAL_UPDATE_PASSES = 3
     GLITCH_FRAGMENTS = (
@@ -670,6 +671,8 @@ class ContentFadeTransition:
         self._curtain_size: tuple[int, int] = (0, 0)
         self._fragment_items: list[int] = []
         self._swapped = False
+        self._anim_after_id: str | None = None
+        self._build_overlay_shell()
 
     @property
     def active(self) -> bool:
@@ -681,6 +684,24 @@ class ContentFadeTransition:
         if value < 0.5:
             return 4.0 * value * value * value
         return 1.0 - pow(-2.0 * value + 2.0, 3.0) / 2.0
+
+    @staticmethod
+    def _ease_out_cubic(value: float) -> float:
+        value = max(0.0, min(1.0, value))
+        return 1.0 - (1.0 - value) ** 3
+
+    @staticmethod
+    def _mix_toward_bg(color: str, opacity: float) -> str:
+        opacity = max(0.0, min(1.0, opacity))
+        if opacity >= 1.0:
+            return color
+        if opacity <= 0.0:
+            return BG_MAIN
+        from_rgb = tuple(int(color[i : i + 2], 16) for i in (1, 3, 5))
+        bg_rgb = tuple(int(BG_MAIN[i : i + 2], 16) for i in (1, 3, 5))
+        return "#" + "".join(
+            f"{int(round(b + (f - b) * opacity)):02x}" for f, b in zip(from_rgb, bg_rgb)
+        )
 
     @staticmethod
     def _band_window(progress: float, start: float, duration: float) -> float:
@@ -703,62 +724,88 @@ class ContentFadeTransition:
 
         self._active = True
         self._swapped = False
-        self._overlay = self._create_overlay(container)
+        self._ensure_overlay(container)
+        tick_sec = self.STEP_MS / 1000.0
+        fade_in_sec = self.FADE_IN_STEPS * tick_sec
+        glitch_sec = self.GLITCH_STEPS * tick_sec
+        fade_out_sec = self.FADE_OUT_STEPS * tick_sec
         hold_steps = max(6, (self.SETTLE_MS if settle_ms is None else max(0, int(settle_ms))) // self.STEP_MS)
-        total_steps = self.GLITCH_STEPS + hold_steps + self.FADE_OUT_STEPS
+        hold_sec = hold_steps * tick_sec
+        motion_sec = glitch_sec + hold_sec + fade_out_sec
+        phase = "cover"
+        started_at = time.perf_counter()
 
-        def animate(step: int = 0) -> None:
-            if self._overlay is None:
+        def abort_if_overlay_gone() -> bool:
+            if self._overlay_alive():
+                return False
+            if not self._swapped:
                 self._finish_after_swap(swap, before_reveal, on_complete)
+            else:
+                self._active = False
+            return True
+
+        def animate() -> None:
+            nonlocal phase, started_at
+            self._anim_after_id = None
+            if not self._active or abort_if_overlay_gone():
                 return
 
-            if step == self.SWAP_STEP and not self._swapped:
-                self._swapped = True
-                try:
-                    swap()
-                    self._run_before_reveal(container, before_reveal)
-                except Exception:
-                    self._destroy_overlay()
-                    self._active = False
-                    raise
+            elapsed = time.perf_counter() - started_at
 
-            if step < self.FADE_IN_STEPS:
-                fade_in = (step + 1) / self.FADE_IN_STEPS
-                try:
-                    self._overlay.attributes("-alpha", fade_in * self.PEAK_ALPHA)
-                except Exception:
-                    pass
+            if phase == "cover":
+                if elapsed < fade_in_sec:
+                    self._set_overlay_alpha((elapsed / fade_in_sec) * self.PEAK_ALPHA)
+                    self._anim_after_id = self._root.after(self.STEP_MS, animate)
+                    return
+                self._set_overlay_alpha(self.PEAK_ALPHA)
+                phase = "swap"
+                # Yield so the opaque curtain can paint before layout work blocks.
+                self._anim_after_id = self._root.after(1, animate)
+                return
 
-            if step < self.GLITCH_STEPS:
-                progress = step / max(1, self.GLITCH_STEPS - 1)
-                self._draw_glitch_frame(progress, 1.0)
-            elif step < self.GLITCH_STEPS + hold_steps:
-                hold_progress = (step - self.GLITCH_STEPS) / max(1, hold_steps - 1)
+            if phase == "swap":
+                if not self._swapped:
+                    self._swapped = True
+                    try:
+                        swap()
+                        self._run_before_reveal(container, before_reveal)
+                    except Exception:
+                        self._release_overlay()
+                        self._active = False
+                        raise
+                phase = "motion"
+                started_at = time.perf_counter()
+                elapsed = 0.0
+
+            if elapsed < glitch_sec:
+                progress = min(1.0, elapsed / glitch_sec) if glitch_sec > 0 else 1.0
+                appear = self._ease_out_cubic(
+                    min(1.0, elapsed / self.LINE_FADE_IN_SEC) if self.LINE_FADE_IN_SEC > 0 else 1.0
+                )
+                self._draw_glitch_frame(progress, 1.0, opacity=appear, hold_idle=True)
+            elif elapsed < glitch_sec + hold_sec:
+                hold_progress = (elapsed - glitch_sec) / hold_sec if hold_sec > 0 else 1.0
                 self._draw_glitch_frame(1.0, max(0.0, 1.0 - hold_progress))
             else:
                 self._hide_glitch_fragments()
-                fade_progress = (step - self.GLITCH_STEPS - hold_steps + 1) / self.FADE_OUT_STEPS
-                try:
-                    self._overlay.attributes(
-                        "-alpha",
-                        max(0.0, (1.0 - fade_progress) * self.PEAK_ALPHA),
-                    )
-                except Exception:
-                    pass
+                fade_progress = (
+                    (elapsed - glitch_sec - hold_sec) / fade_out_sec if fade_out_sec > 0 else 1.0
+                )
+                self._set_overlay_alpha(max(0.0, (1.0 - fade_progress) * self.PEAK_ALPHA))
 
-            if step + 1 >= total_steps:
+            if elapsed >= motion_sec:
                 try:
                     self._flush_pending_ui(container, include_timers=True, passes=self.FINAL_UPDATE_PASSES)
                 finally:
-                    self._destroy_overlay()
+                    self._release_overlay()
                     self._active = False
                     if on_complete is not None:
                         on_complete()
                 return
 
-            self._root.after(self.STEP_MS, lambda next_step=step + 1: animate(next_step))
+            self._anim_after_id = self._root.after(self.STEP_MS, animate)
 
-        animate()
+        self._anim_after_id = self._root.after(1, animate)
 
     def _init_glitch_fragments(self) -> None:
         canvas = self._curtain_canvas
@@ -775,7 +822,14 @@ class ContentFadeTransition:
         for item in self._fragment_items:
             canvas.itemconfigure(item, state="hidden")
 
-    def _draw_glitch_frame(self, progress: float, intensity: float) -> None:
+    def _draw_glitch_frame(
+        self,
+        progress: float,
+        intensity: float,
+        *,
+        opacity: float = 1.0,
+        hold_idle: bool = False,
+    ) -> None:
         canvas = self._curtain_canvas
         if canvas is None:
             return
@@ -785,22 +839,24 @@ class ContentFadeTransition:
             return
 
         self._init_glitch_fragments()
-        if intensity <= 0.0:
+        if intensity <= 0.0 or opacity <= 0.0:
             self._hide_glitch_fragments()
             return
 
         max_shift = width * 0.04 * intensity
         fragment_duration = 0.58
 
-        for item, (x_frac, y_frac, w_frac, h_frac, direction, _color, start) in zip(
+        for item, (x_frac, y_frac, w_frac, h_frac, direction, color, start) in zip(
             self._fragment_items,
             self.GLITCH_FRAGMENTS,
             strict=True,
         ):
             local_t = self._band_window(progress, start, fragment_duration)
             if local_t <= 0.0:
-                canvas.itemconfigure(item, state="hidden")
-                continue
+                if not hold_idle:
+                    canvas.itemconfigure(item, state="hidden")
+                    continue
+                local_t = 0.0
 
             eased = self._ease_in_out_cubic(local_t)
             offset_x = direction * max_shift * (eased * 2.0 - 1.0)
@@ -809,7 +865,7 @@ class ContentFadeTransition:
             x1 = width * x_frac + offset_x
             y1 = height * y_frac
             canvas.coords(item, x1, y1, x1 + frag_w, y1 + frag_h)
-            canvas.itemconfigure(item, state="normal")
+            canvas.itemconfigure(item, fill=self._mix_toward_bg(color, opacity), state="normal")
 
     def _finish_after_swap(
         self,
@@ -821,10 +877,28 @@ class ContentFadeTransition:
             swap()
             self._run_before_reveal(None, before_reveal)
         finally:
-            self._destroy_overlay()
+            self._release_overlay()
             self._active = False
             if on_complete is not None:
                 on_complete()
+
+    def _set_overlay_alpha(self, value: float) -> None:
+        overlay = self._overlay
+        if overlay is None:
+            return
+        try:
+            overlay.attributes("-alpha", max(0.0, min(self.PEAK_ALPHA, value)))
+        except Exception:
+            pass
+
+    def _cancel_anim(self) -> None:
+        if self._anim_after_id is None:
+            return
+        try:
+            self._root.after_cancel(self._anim_after_id)
+        except Exception:
+            pass
+        self._anim_after_id = None
 
     def _run_before_reveal(
         self,
@@ -858,29 +932,61 @@ class ContentFadeTransition:
             except Exception:
                 return
 
-    def _create_overlay(self, container: tk.Widget) -> tk.Toplevel:
+    def _overlay_alive(self) -> bool:
+        overlay = self._overlay
+        if overlay is None:
+            return False
+        try:
+            return bool(overlay.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _build_overlay_shell(self) -> None:
+        if self._overlay_alive():
+            return
+        self._drop_overlay()
+        try:
+            overlay = tk.Toplevel(self._root)
+            overlay.withdraw()
+            overlay.overrideredirect(True)
+            overlay.attributes("-topmost", True)
+            overlay.attributes("-alpha", 0.0)
+            overlay.configure(bg=BG_MAIN)
+            self._curtain_canvas = tk.Canvas(
+                overlay,
+                highlightthickness=0,
+                bd=0,
+                bg=BG_MAIN,
+            )
+            self._curtain_canvas.pack(fill="both", expand=True)
+            self._overlay = overlay
+            self._fragment_items = []
+            self._init_glitch_fragments()
+        except Exception:
+            self._drop_overlay()
+
+    def _ensure_overlay(self, container: tk.Widget) -> None:
+        if not self._overlay_alive():
+            self._build_overlay_shell()
+        self._show_overlay(container)
+
+    def _show_overlay(self, container: tk.Widget) -> None:
+        overlay = self._overlay
+        if overlay is None:
+            return
+        self._hide_glitch_fragments()
+        self._set_overlay_alpha(0.0)
+        try:
+            overlay.withdraw()
+        except tk.TclError:
+            pass
         container.update_idletasks()
-        overlay = tk.Toplevel(self._root)
-        overlay.withdraw()
-        overlay.overrideredirect(True)
-        overlay.attributes("-topmost", True)
-        overlay.attributes("-alpha", 0.0)
-        overlay.configure(bg=BG_MAIN)
-        self._fragment_items = []
-        self._curtain_canvas = tk.Canvas(
-            overlay,
-            highlightthickness=0,
-            bd=0,
-            bg=BG_MAIN,
-        )
-        self._curtain_canvas.pack(fill="both", expand=True)
         self._position_overlay(overlay, container)
         overlay.deiconify()
         try:
             overlay.lift()
         except Exception:
             pass
-        return overlay
 
     def _position_overlay(self, overlay: tk.Toplevel, container: tk.Widget) -> None:
         try:
@@ -896,13 +1002,28 @@ class ContentFadeTransition:
         except Exception:
             pass
 
-    def _destroy_overlay(self) -> None:
+    def _release_overlay(self) -> None:
+        self._cancel_anim()
+        if not self._overlay_alive():
+            self._drop_overlay()
+            return
+        self._hide_glitch_fragments()
+        self._set_overlay_alpha(0.0)
+        overlay = self._overlay
+        if overlay is None:
+            return
+        try:
+            overlay.withdraw()
+        except tk.TclError:
+            self._drop_overlay()
+
+    def _drop_overlay(self) -> None:
+        self._cancel_anim()
         overlay = self._overlay
         self._overlay = None
         self._curtain_canvas = None
         self._curtain_size = (0, 0)
         self._fragment_items = []
-        self._swapped = False
         if overlay is not None:
             try:
                 overlay.destroy()

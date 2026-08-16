@@ -1609,8 +1609,7 @@ class App(WaveformMixin, ctk.CTk):
             return
 
         prev_page = self._active_main_page
-        target_page = self._ensure_main_page_for_transition(name)
-        if target_page is None:
+        if name not in ("process", "library", "preferences"):
             return
 
         self._configure_tab_button(self.btn_nav_process, active=name == "process")
@@ -1618,6 +1617,8 @@ class App(WaveformMixin, ctk.CTk):
         self._configure_tab_button(self.btn_nav_preferences, active=name == "preferences")
 
         def swap() -> None:
+            if self._ensure_main_page_for_transition(name) is None:
+                return
             page_map = {
                 "process": self.process_page,
                 "library": self.library_tuning_page,
