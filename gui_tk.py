@@ -1497,13 +1497,13 @@ class App(WaveformMixin, ctk.CTk):
         self.btn_report_issue = ctk.CTkButton(
             nav_buttons,
             text="Issue",
-            width=55,
-            height=28,
+            width=46,
+            height=22,
             fg_color=ISSUE_BUTTON_BG,
             hover_color=ISSUE_BUTTON_HOVER,
             text_color=FG_MUTED,
-            corner_radius=TAB_CORNER_RADIUS,
-            font=self._font(TYPE_LABEL),
+            corner_radius=ISSUE_BUTTON_CORNER_RADIUS,
+            font=self._font(TYPE_CAPTION),
             command=self._open_report_issue,
         )
         self.btn_report_issue.grid(row=0, column=3, padx=(SPACE_2, 0))
