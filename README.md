@@ -191,14 +191,14 @@ Native-rate decode → linear gain (`10^(gain/20)`) → ffmpeg encode. No DSP.
 Default limiter engine, when peak control is required. Single-threaded VST3 host (pedalboard); clean-gain renders may run in parallel.
 
 1. Decode float32 at native rate.
-2. **Gain split** - `compensated_drive = gain_db - output_level` (output level = peak ceiling, default -1.0 dBFS). Negative component: linear pre-gain. Non-negative component: Pro-L gain parameter. Cuts are pre-plugin; boosts pass through the limiter.
-3. **Pro-L 2** - Transparent style, 4× oversampling, true-peak limiting enabled, `output_level` = ceiling.
+2. **Gain split** - `compensated_drive = gain_db - output_level` (output level = peak ceiling minus a 0.1 dB true-peak pad, default ceiling -1.0 dBFS). Negative component: linear pre-gain. Non-negative component: Pro-L gain parameter. Cuts are pre-plugin; boosts pass through the limiter.
+3. **Pro-L 2** - Transparent style, 4× oversampling, true-peak limiting enabled, `output_level` = padded ceiling.
 4. Buffer processing via pedalboard.
 5. **Post-limiter trim** - re-measure section LUFS; if above `target_high`, apply linear correction (peak ceiling met but section still above upper LUFS bound).
 6. ffmpeg encode; metadata via mutagen with loudness-normalization tags removed.
 
 **Limiter-assisted (LoudMax)**  
-Alternate limiter engine (**Preferences → Limiter engine**), for anyone without a Pro-L 2 license. Same compensated drive as Pro-L 2 (`gain_db - output_level`) applied as linear pre-gain; LoudMax's `output_db` is the ceiling trim and its threshold stays neutral. True-peak/ISP catches peaks above the ceiling.
+Alternate limiter engine (**Preferences → Limiter engine**), for anyone without a Pro-L 2 license. Same compensated drive as Pro-L 2 (`gain_db - output_level`) applied as linear pre-gain, plus a small LoudMax-only LUFS calibration. `output_db` is the ceiling trim minus a 0.2 dB true-peak pad; drive uses that padded ceiling so LUFS stays matched. Threshold stays neutral. True-peak/ISP catches peaks above the ceiling.
 
 **MP3 retry**  
 Post-encode true-peak re-measurement. One retry with reduced limiter output level (limiter path) or gain (clean path) if dBTP exceeds ceiling. Preserve-format MP3→MP3 skips retry.

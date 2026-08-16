@@ -137,7 +137,7 @@ PEAK_CONTROL_SEVERITY_LIGHT = "light"
 PEAK_CONTROL_SEVERITY_MODERATE = "moderate"
 PEAK_CONTROL_SEVERITY_HEAVY = "heavy"
 
-# True-peak ceiling for analysis, reporting, and Pro-L output level (-1.0 dBTP).
+# True-peak ceiling for analysis, reporting, and limiter output level (-1.0 dBTP).
 DEFAULT_BOOST_PEAK_CEILING_DBFS = -1.0
 
 PROCESSING_ENGINE_PROL2 = "FabFilter Pro-L 2 Gain"
@@ -161,6 +161,9 @@ DEFAULT_LIMITER_ENGINE = LIMITER_ENGINE_PROL2
 PROL2_DEFAULT_OUTPUT_LEVEL_DBFS = -1.0
 PROL2_DEFAULT_TRUE_PEAK = True
 PROL2_DEFAULT_OVERSAMPLING = "4x"
+# ISP leak vs measured ceiling. Applied to output_level; drive uses the same
+# padded ceiling so LUFS stays matched.
+PROL2_TRUE_PEAK_CALIBRATION_DB = 0.10
 
 PROL2_STYLE_MODERN = "Modern"
 PROL2_STYLE_TRANSPARENT = "Transparent"
@@ -181,6 +184,9 @@ LOUDMAX_PROCESS_BUFFER_SIZE = 8192
 # Empirical offset vs Pro-L 2 on limiter-assisted renders; LoudMax's simpler
 # brickwall path tends to land slightly quieter at the same nominal settings.
 LOUDMAX_LIMITER_CALIBRATION_DB = 0.10
+# ISP leak vs measured ceiling (~0.2 dBTP). Applied to output_db; drive uses
+# the same padded ceiling so LUFS stays matched.
+LOUDMAX_TRUE_PEAK_CALIBRATION_DB = 0.20
 
 MP3_OUTPUT_BITRATE = "320k"
 MP3_ID3_VERSION = 3

@@ -543,7 +543,8 @@ class PreferencesPage(ctk.CTkFrame):
             padx=(0, 0),
             tooltip=(
                 "True-peak safety ceiling for boosted or rendered files. -1.0 dBTP leaves practical headroom "
-                "for club playback, limiters, and lossy encoding."
+                "for club playback and lossy encoding. Limiter-assisted Pro-L 2 and LoudMax apply a small "
+                "internal output pad for ISP overshoot; clean gain follows this value as set."
             ),
         )
 

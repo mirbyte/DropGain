@@ -72,6 +72,7 @@ from analysis import (
     LOUDMAX_DEFAULT_PLUGIN_PATH,
     LOUDMAX_LIMITER_CALIBRATION_DB,
     LOUDMAX_PROCESS_BUFFER_SIZE,
+    LOUDMAX_TRUE_PEAK_CALIBRATION_DB,
     MP3_ID3_VERSION,
     MP3_OUTPUT_BITRATE,
     PIONEER_COMPATIBLE_AIFF_CODECS,
@@ -89,6 +90,7 @@ from analysis import (
     PROL2_DEFAULT_STYLE,
     PROL2_DEFAULT_TRUE_PEAK,
     PROL2_PROCESS_BUFFER_SIZE,
+    PROL2_TRUE_PEAK_CALIBRATION_DB,
     STRICT_VERIFY_LOSSLESS_OUTPUT,
     SUPPORTED_EXTENSIONS,
     TrackRow,
@@ -2596,7 +2598,11 @@ def _process_audio_with_prol2_gain_impl(
     post_target_high_lufs: float | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
 ) -> dict[str, object]:
-    """Render audio through FabFilter Pro-L 2 on the dedicated host thread."""
+    """Render audio through FabFilter Pro-L 2 on the dedicated host thread.
+
+    output_level is lowered by the Pro-L true-peak pad (~0.1 dBTP ISP leak);
+    drive uses that same padded ceiling so LUFS stays matched.
+    """
     ext = Path(input_path).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise RuntimeError(f"processing not supported for {ext}")
@@ -2619,7 +2625,8 @@ def _process_audio_with_prol2_gain_impl(
 
     with benchmark_timer("render"):
         audio = decode_audio_ffmpeg_at_sample_rate(input_path, channels, sr)
-        compensated_drive_db = float(gain_db) - float(output_level_dbfs)
+        padded_output_level_dbfs = float(output_level_dbfs) - PROL2_TRUE_PEAK_CALIBRATION_DB
+        compensated_drive_db = float(gain_db) - padded_output_level_dbfs
         pre_limiter_gain_db = min(compensated_drive_db, 0.0)
         plugin_gain_db = max(compensated_drive_db, 0.0)
         if pre_limiter_gain_db < -0.000001:
@@ -2630,7 +2637,7 @@ def _process_audio_with_prol2_gain_impl(
         configure_prol2_for_gain(
             plugin,
             gain_db=plugin_gain_db,
-            output_level_dbfs=output_level_dbfs,
+            output_level_dbfs=padded_output_level_dbfs,
             true_peak=true_peak,
             oversampling=oversampling,
             style=style,
@@ -2740,8 +2747,9 @@ def _process_audio_with_loudmax_gain_impl(
 
     LoudMax's output_db acts as a final ceiling trim, so external pre-gain
     uses compensated drive (gain_db - output_level_dbfs) plus a small
-    LoudMax-only calibration offset. Threshold stays neutral; true-peak/ISP
-    catches peaks above the ceiling.
+    LoudMax-only LUFS calibration. output_db is lowered by the LoudMax
+    true-peak pad (~0.2 dBTP ISP leak); drive uses that same padded ceiling
+    so LUFS stays matched. Threshold stays neutral.
     """
     ext = Path(input_path).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
@@ -2766,8 +2774,9 @@ def _process_audio_with_loudmax_gain_impl(
     with benchmark_timer("render"):
         audio = decode_audio_ffmpeg_at_sample_rate(input_path, channels, sr)
 
+        padded_output_level_dbfs = float(output_level_dbfs) - LOUDMAX_TRUE_PEAK_CALIBRATION_DB
         compensated_drive_db = (
-            float(gain_db) - float(output_level_dbfs) + LOUDMAX_LIMITER_CALIBRATION_DB
+            float(gain_db) - padded_output_level_dbfs + LOUDMAX_LIMITER_CALIBRATION_DB
         )
         if abs(compensated_drive_db) > 0.000001:
             audio = apply_linear_gain(audio, compensated_drive_db)
@@ -2776,7 +2785,7 @@ def _process_audio_with_loudmax_gain_impl(
         plugin = load_plugin(plugin_file)
         configure_loudmax_for_gain(
             plugin,
-            output_level_dbfs=output_level_dbfs,
+            output_level_dbfs=padded_output_level_dbfs,
             true_peak=True,
         )
 
