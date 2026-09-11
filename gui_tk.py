@@ -14,6 +14,7 @@ import logging
 import logging.handlers
 import math
 import os
+from pathlib import Path
 import queue
 import subprocess
 import sys
@@ -143,7 +144,7 @@ SETTINGS_SCHEMA_VERSION = 1
 LOG_FILE_NAME = "dropgain.log"
 CRASH_LOG_FILE_NAME = "dropgain_crash.log"
 START_MAXIMIZED = True
-APP_ICON_PATH = script_folder() / "assets" / "icon.ico"
+APP_ICON_PATH = Path(__file__).resolve().parent / "assets" / "icon.ico"
 
 
 def enable_crash_diagnostics() -> None:
