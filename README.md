@@ -19,7 +19,7 @@ EDM- and DJ-library oriented section loudness normalization: analyze the loudest
 **Still in active development.** App will contain bugs. Behavior, defaults, and edge cases will change.
 
 - **Tested platform:** Windows only (by the author so far)
-- **macOS / Linux:** may work (Python + Tkinter + FFmpeg), but not tested
+- **macOS / Linux:** from source only; may work, not tested. See **Dependencies and launch**.
 - Always try on a **copy** of your library first
 - Processed files use the `_DG` suffix; originals are not modified
 
@@ -225,27 +225,39 @@ Load `_DG` copies (or your output folder) into the library you play from, not un
 
 ### Dependencies and launch
 
-**Packaged Windows build** (`release/DropGain/` from `python build.py`):
+**Windows (tested)**
+
+Packaged build (`release/DropGain/` from `python build.py`):
 
 - Run `DropGain.exe`. FFmpeg / ffprobe ship in the app `bin/` folder (no PATH install).
 - Limiter-assisted mode still needs a VST3: **LoudMax** (free; drop into `plugins/` next to the exe, or system VST3 folder) or **FabFilter Pro-L 2**. See `plugins/README.txt` and `FIRST_RUN.txt` in the release folder.
 - Analysis and clean-gain render work without a limiter plugin.
 
-**From source:**
+From source:
 
 - **FFmpeg / ffprobe** on `PATH`, or in a `bin/` folder next to the app (same layout as the packaged build)
 - Python deps: `pip install -r requirements.txt` (`customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`)
 - Limiter VST3 as above (`PROL2_PLUGIN_PATH` / `LOUDMAX_PLUGIN_PATH` or auto-discovery)
+- Launch `main.pyw`. **Preferences → Check Limiter / System** validates the toolchain before batch render.
 
-Launch `main.pyw`. **Preferences → Check Limiter / System** validates the toolchain before batch render.
+Building a release: put an LGPL FFmpeg essentials tree in `third_party/ffmpeg/` (see `third_party/ffmpeg/README.DropGain.txt`), then `pip install -r requirements-build.txt` and `python build.py` (optional `--zip`). Output is `release/DropGain/` with `bin/`, `plugins/`, and `licenses/`.
 
-**Building a Windows release:** put an LGPL FFmpeg essentials tree in `third_party/ffmpeg/` (see `third_party/ffmpeg/README.DropGain.txt`), then `pip install -r requirements-build.txt` and `python build.py` (optional `--zip`). Output is `release/DropGain/` with `bin/`, `plugins/`, and `licenses/`.
+**macOS / Linux (not tested)**
+
+No packaged build. From source only:
+
+- Python 3 with Tkinter (on macOS, the python.org installer includes it; Homebrew Python often needs `python-tk`)
+- **FFmpeg / ffprobe** on `PATH` (`brew install ffmpeg` on macOS)
+- `pip install -r requirements.txt`
+- Limiter-assisted mode needs a **native** VST3 for that OS (not a Windows `.vst3`). Analysis and clean-gain work without one. Discovery: `plugins/` next to the app, system VST3 folders, or `PROL2_PLUGIN_PATH` / `LOUDMAX_PLUGIN_PATH`
+- Launch: `python3 main.py`. **Preferences → Check Limiter / System** before batch render
 
 ### Code layout
 
 | Module | Role |
 |--------|------|
-| `main.pyw` | Entry point |
+| `main.pyw` | Windows entry point |
+| `main.py` | macOS / Linux entry (`python3 main.py`) |
 | `gui_tk.py` | Main `App` window: navigation, settings I/O, threading, job orchestration, results table |
 | `gui_process.py` | Process page UI: source folder, analyze/render actions, metrics, table, log |
 | `gui_settings.py` | Preferences page, dependency checks |
