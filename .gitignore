@@ -59,6 +59,7 @@ drop_lufs_settings.json
 test tracks/
 tests/
 CRG/
+/assets/temp/
 
 # Env / secrets
 .env
