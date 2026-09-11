@@ -642,9 +642,9 @@ class ContentFadeTransition:
 
     PEAK_ALPHA = 1.0
     STEP_MS = 14
-    GLITCH_STEPS = 24
+    GLITCH_STEPS = 16
     FADE_IN_STEPS = 4
-    FADE_OUT_STEPS = 12
+    FADE_OUT_STEPS = 10
     SETTLE_MS = 150
     LINE_FADE_IN_SEC = 0.09
     EDGE_BLEED = 3
@@ -784,14 +784,13 @@ class ContentFadeTransition:
                 )
                 self._draw_glitch_frame(progress, 1.0, opacity=appear, hold_idle=True)
             elif elapsed < glitch_sec + hold_sec:
-                hold_progress = (elapsed - glitch_sec) / hold_sec if hold_sec > 0 else 1.0
-                self._draw_glitch_frame(1.0, max(0.0, 1.0 - hold_progress))
+                self._hide_glitch_fragments()
             else:
                 self._hide_glitch_fragments()
                 fade_progress = (
                     (elapsed - glitch_sec - hold_sec) / fade_out_sec if fade_out_sec > 0 else 1.0
                 )
-                self._set_overlay_alpha(max(0.0, (1.0 - fade_progress) * self.PEAK_ALPHA))
+                self._set_overlay_alpha(max(0.0, ((1.0 - fade_progress) ** 3) * self.PEAK_ALPHA))
 
             if elapsed >= motion_sec:
                 try:
