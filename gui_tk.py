@@ -36,16 +36,6 @@ except ImportError as exc:
         "Then start DropGain again."
     ) from exc
 
-try:
-    from PIL import Image, ImageDraw, ImageFont, ImageTk
-except ImportError as exc:
-    raise RuntimeError(
-        "Required Python package Pillow was not found.\n\n"
-        "Install it with:\n\n"
-        "    pip install pillow\n\n"
-        "Then start DropGain again."
-    ) from exc
-
 from analysis import (
     APP_WINDOW_TITLE,
     DEFAULT_BOOST_PEAK_CEILING_DBFS,
@@ -153,6 +143,7 @@ SETTINGS_SCHEMA_VERSION = 1
 LOG_FILE_NAME = "dropgain.log"
 CRASH_LOG_FILE_NAME = "dropgain_crash.log"
 START_MAXIMIZED = True
+APP_ICON_PATH = script_folder() / "assets" / "icon.ico"
 
 
 def enable_crash_diagnostics() -> None:
@@ -194,7 +185,6 @@ class App(WaveformMixin, ctk.CTk):
         self.title(APP_WINDOW_TITLE)
         self._last_ui_scale = ui_scale_for(self)
         self._dpi_refresh_after_id: str | None = None
-        self._app_icon: ImageTk.PhotoImage | None = None
 
         self._settings = self._load_settings()
         self._run_counts = self._empty_run_counts()
@@ -616,35 +606,9 @@ class App(WaveformMixin, ctk.CTk):
 
     def _install_window_icon(self) -> None:
         try:
-            size = 64
-            img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(img)
-            margin = 8
-            draw.rounded_rectangle(
-                (margin, margin, size - margin, size - margin),
-                radius=14,
-                fill=ICE_FILL,
-            )
-            bar_w = 8
-            bar_bottom = size - margin - 10
-            bar_top = margin + 14
-            draw.rounded_rectangle(
-                (size // 2 - bar_w // 2, bar_top, size // 2 + bar_w // 2, bar_bottom),
-                radius=3,
-                fill=BUTTON_TEXT_DARK,
-            )
-            draw.polygon(
-                [
-                    (size // 2 - 12, bar_top + 6),
-                    (size // 2 + 12, bar_top + 6),
-                    (size // 2, bar_top - 4),
-                ],
-                fill=BUTTON_TEXT_DARK,
-            )
-            self._app_icon = ImageTk.PhotoImage(img)
-            self.iconphoto(True, self._app_icon)
+            self.iconbitmap(str(APP_ICON_PATH))
         except Exception:
-            self._app_icon = None
+            pass
 
     def _resolve_table_font(self, size: int, *, weight: str | None = None) -> tkfont.Font:
         available = {str(name).lower(): str(name) for name in self.tk.call("font", "families")}
