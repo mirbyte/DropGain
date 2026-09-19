@@ -196,6 +196,7 @@ class PreferencesPage(ctk.CTkFrame):
 
         header = ctk.CTkFrame(body, fg_color="transparent")
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        header.grid_columnconfigure(0, weight=1)
 
         app._label(
             header,
@@ -216,11 +217,15 @@ class PreferencesPage(ctk.CTkFrame):
             size=SETTINGS_HINT,
             justify="left",
         )
-        self.lbl_system_check_status.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.lbl_system_check_status.grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.lbl_system_check_status.grid_remove()
-        self.lbl_system_check_status.bind(
+        self.system_check_results_frame = ctk.CTkFrame(header, fg_color="transparent")
+        self.system_check_results_frame.grid(row=2, column=0, sticky="ew", pady=(2, 4))
+        self.system_check_results_frame.grid_columnconfigure(0, weight=1)
+        self.system_check_results_frame.grid_remove()
+        self.system_check_results_frame.bind(
             "<Configure>",
-            self._on_system_check_status_configure,
+            self._on_system_check_results_configure,
             add="+",
         )
 
@@ -885,40 +890,62 @@ class PreferencesPage(ctk.CTkFrame):
 
         card.bind("<Configure>", on_configure, add="+")
 
-    def _on_system_check_status_configure(self, event: tk.Event) -> None:
-        if event.widget is not self.lbl_system_check_status:
+    def _update_system_check_result_wraplengths(self, width: int) -> None:
+        if width <= 0:
             return
-        wrap = max(int(event.width) - 4, 0)
-        if wrap <= 0:
+        wrap = max(width - 4, 80)
+        for label in self.system_check_results_frame.winfo_children():
+            last_wrap = getattr(label, "_dropgain_wraplength", None)
+            if last_wrap is not None and abs(last_wrap - wrap) < 8:
+                continue
+            label._dropgain_wraplength = wrap  # type: ignore[attr-defined]
+            label.configure(wraplength=wrap)
+
+    def _on_system_check_results_configure(self, event: tk.Event) -> None:
+        if event.widget is not self.system_check_results_frame:
             return
-        last_wrap = getattr(self.lbl_system_check_status, "_dropgain_wraplength", None)
-        if last_wrap is not None and abs(last_wrap - wrap) < 8:
-            return
-        self.lbl_system_check_status._dropgain_wraplength = wrap  # type: ignore[attr-defined]
-        self.lbl_system_check_status.configure(wraplength=wrap)
+        self._update_system_check_result_wraplengths(int(event.width))
 
     def show_system_check_results(self, results: list[tuple[str, bool, str]]) -> None:
-        lines: list[str] = []
-        all_ok = True
-        for name, ok, detail in results:
-            if not ok:
-                all_ok = False
-            symbol = "✓" if ok else "✗"
-            lines.append(f"{symbol} {name}: {detail}" if detail else f"{symbol} {name}")
-
-        if all_ok:
+        if all(ok for _, ok, _ in results):
             heading = "All checks passed"
             color = SUCCESS_FG
         else:
             heading = "Some checks failed"
             color = ERROR_FG
 
+        lines: list[str] = []
+        for name, ok, detail in results:
+            symbol = "✓" if ok else "✗"
+            lines.append(f"{symbol} {name}: {detail}" if detail else f"{symbol} {name}")
+
         self.lbl_system_check_status.configure(
-            text=f"{heading}\n" + "\n".join(lines),
+            text=heading,
             text_color=color,
         )
-        self.lbl_system_check_status.grid(row=1, column=0, sticky="ew", pady=(6, 8))
-        self.lbl_system_check_status.update_idletasks()
-        wrap = max(self.lbl_system_check_status.winfo_width() - 4, 0)
-        if wrap > 0:
-            self.lbl_system_check_status.configure(wraplength=wrap)
+        for child in self.system_check_results_frame.winfo_children():
+            child.destroy()
+        split_at = (len(lines) + 1) // 2
+        for row, row_lines in enumerate((lines[:split_at], lines[split_at:])):
+            if not row_lines:
+                continue
+            label = self.app._label(
+                self.system_check_results_frame,
+                text="  |  ".join(row_lines),
+                color=color,
+                bg=BG_MAIN,
+                size=SETTINGS_HINT,
+                anchor="w",
+                justify="left",
+                wraplength=1,
+            )
+            label.grid(
+                row=row,
+                column=0,
+                sticky="ew",
+                pady=(0, 1),
+            )
+        self.lbl_system_check_status.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.system_check_results_frame.grid(row=2, column=0, sticky="ew", pady=(2, 4))
+        self.system_check_results_frame.update_idletasks()
+        self._update_system_check_result_wraplengths(self.system_check_results_frame.winfo_width())
