@@ -46,7 +46,7 @@ On a Ryzen 7 with Analysis workers set to 4, full analyze + render runs have ave
 - **Clean gain or limiter-assisted** - linear gain when the ceiling allows; a limiter engine (FabFilter Pro-L 2 or LoudMax) with `max_reduction` cap when peak control is needed
 - **Bass-aware trim** - on bass-heavy sections, low-band energy can reduce a boost or deepen a cut slightly
 - **`_DG` outputs** - copies beside sources or under a separate root; preserve format, force AIFF/MP3, or decode MP3 to AIFF to avoid double lossy encode
-- **Library Tuning** - profile the library; recommend targets, window/hop, thresholds, and ceiling
+- **Library Tuning** - profile the library and suggest a loudness target
 - **Verification** - post-render re-measurement; loudness-normalization tags stripped; optional CSV (`dropgain_report.csv`) and session log
 
 ## When DropGain makes sense (and when it doesn't)
