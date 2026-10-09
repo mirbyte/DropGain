@@ -9,6 +9,14 @@ import tkinter as tk
 import customtkinter as ctk
 
 from analysis import (
+    BASS_TREATMENT_CHOICES,
+    BASS_TREATMENT_LEVEL_TRIM,
+    BASS_TREATMENT_LOW_END_EQ,
+    BASS_TREATMENT_OFF,
+    MAX_LOW_END_EQ_MAX_DB,
+    MIN_LOW_END_EQ_MAX_DB,
+    MAX_LOW_END_EQ_SHELF_HZ,
+    MIN_LOW_END_EQ_SHELF_HZ,
     LOSSLESS_MIN_ABS_GAIN_DB,
     MAX_LOUD_SECTION_HOP_SECONDS,
     MAX_ANALYSIS_WORKER_THREADS,
@@ -22,6 +30,7 @@ from analysis import (
     MIN_BASS_PENALTY_THRESHOLD_DB,
     LIMITER_ENGINE_CHOICES,
     MP3_MIN_ABS_GAIN_DB,
+    normalize_bass_treatment,
     NORMALIZATION_MODE_CHOICES,
     OUTPUT_FORMAT_MODE_CHOICES,
     PROCESSED_SUFFIX,
@@ -181,6 +190,7 @@ class PreferencesPage(ctk.CTkFrame):
         super().__init__(master, fg_color=BG_MAIN, corner_radius=0)
         self.app = app
         self._number_inputs: list[CTkNumberInput] = []
+        self._bass_trim_inputs: list[CTkNumberInput] = []
         self._setting_card_frames: list[ctk.CTkFrame] = []
         self._preferences_single_column = False
         self._layout_after_id: str | None = None
@@ -385,14 +395,52 @@ class PreferencesPage(ctk.CTkFrame):
         for widget in (
             self.mode_menu,
             self.limiter_engine_menu,
+            self.bass_treatment_menu,
             self.output_format_menu,
             self.chk_allow_risky_true_peak_boost,
             self.chk_apply_render_gain_threshold,
+            self.chk_include_subfolders,
             self.chk_write_csv,
             self.csv_display,
             self.btn_system_check,
         ):
             widget.configure(state=state)
+        self._sync_bass_treatment_controls()
+
+    def _show_amount_cell(self, cell: ctk.CTkFrame, number_input: CTkNumberInput, visible: bool) -> None:
+        if visible:
+            cell.grid()
+            number_input.configure_state("normal")
+        else:
+            cell.grid_remove()
+
+    def _sync_bass_treatment_controls(self, treatment: str | None = None) -> None:
+        if self._controls_state == "disabled":
+            return
+        if treatment is None:
+            treatment = str(self.app.var_bass_treatment.get())
+        treatment = normalize_bass_treatment(treatment)
+        threshold_state = "normal" if treatment != BASS_TREATMENT_OFF else "disabled"
+        for number_input in self._bass_trim_inputs:
+            number_input.configure_state(threshold_state)
+        self._show_amount_cell(
+            self._level_trim_amount_cell,
+            self._level_trim_amount,
+            treatment == BASS_TREATMENT_LEVEL_TRIM,
+        )
+        self._show_amount_cell(
+            self._low_end_eq_amount_cell,
+            self._low_end_eq_amount,
+            treatment == BASS_TREATMENT_LOW_END_EQ,
+        )
+        self._show_amount_cell(
+            self._low_end_eq_corner_cell,
+            self._low_end_eq_corner,
+            treatment == BASS_TREATMENT_LOW_END_EQ,
+        )
+
+    def _on_bass_treatment_selected(self, choice: str) -> None:
+        self._sync_bass_treatment_controls(choice)
 
     def _card(self, parent: Any, *, row: int, column: int) -> ctk.CTkFrame:
         padx = (0, 7) if column == 0 else (7, 0)
@@ -437,7 +485,8 @@ class PreferencesPage(ctk.CTkFrame):
         padx: tuple[int, int] = (0, 12),
         tooltip: str = "",
         columnspan: int = 1,
-    ) -> None:
+        remember: list[CTkNumberInput] | None = None,
+    ) -> ctk.CTkFrame:
         cell = ctk.CTkFrame(parent, fg_color="transparent")
         cell.grid(row=row, column=column, columnspan=columnspan, sticky="w", padx=padx, pady=(2, 4))
         self.app._label(cell, text=label, color=FG_MUTED, bg=BG_CARD, size=SETTINGS_TEXT).pack(side="left")
@@ -455,10 +504,13 @@ class PreferencesPage(ctk.CTkFrame):
         )
         number_input.pack(side="left", padx=(7, 4))
         self._number_inputs.append(number_input)
+        if remember is not None:
+            remember.append(number_input)
         if unit:
             self.app._label(cell, text=unit, color=FG_MUTED, bg=BG_CARD, size=SETTINGS_TEXT).pack(side="left")
         if tooltip:
             self.app._add_tooltip(cell, tooltip)
+        return cell
 
     def _inline_number(
         self,
@@ -676,6 +728,26 @@ class PreferencesPage(ctk.CTkFrame):
             ),
         )
 
+        self.chk_include_subfolders = ctk.CTkCheckBox(
+            card,
+            text="Include subfolders",
+            variable=self.app.var_include_subfolders,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER,
+            border_color=BORDER_COLOR,
+            text_color=FG_MAIN,
+            checkmark_color=BUTTON_TEXT_DARK,
+            checkbox_width=18,
+            checkbox_height=18,
+            font=self.app._font(SETTINGS_TEXT),
+        )
+        self.chk_include_subfolders.grid(row=2, column=0, sticky="w", pady=(12, 0))
+        self.app._add_tooltip(
+            self.chk_include_subfolders,
+            "On: analyze audio in the source folder and every folder inside it. "
+            "Off: only files sitting directly in the source folder.",
+        )
+
     def _build_render_rules_card(self, card: ctk.CTkFrame) -> None:
         self._subheading(card, 0, "RENDER RULES")
         grid = ctk.CTkFrame(card, fg_color="transparent")
@@ -709,15 +781,80 @@ class PreferencesPage(ctk.CTkFrame):
                 "This prevents extreme level changes from changing the intended energy of the master."
             ),
         )
-        self._labeled_number(
+        self._level_trim_amount_cell = self._labeled_number(
             grid, 2, 1, "Max bass-aware trim", self.app.var_bass_max_reduction,
             MIN_BASS_MAX_BOOST_REDUCTION_DB, MAX_BASS_MAX_BOOST_REDUCTION_DB, 0.1, "dB",
             padx=(0, 0),
             tooltip=(
-                "Maximum bass-aware gain trim on bass-heavy tracks. "
-                "Reduces boosts, deepens cuts, or pulls down an otherwise in-target track slightly. "
-                "Set to 0 to disable."
+                "Largest broadband gain pullback Level trim can apply. "
+                "Reduces boosts, deepens cuts, or pulls down an otherwise in-target track."
             ),
+        )
+        self._level_trim_amount = self._number_inputs[-1]
+        self._low_end_eq_amount_cell = self._labeled_number(
+            grid, 2, 1, "Max low-end EQ", self.app.var_low_end_eq_max,
+            MIN_LOW_END_EQ_MAX_DB, MAX_LOW_END_EQ_MAX_DB, 0.1, "dB",
+            padx=(0, 0),
+            tooltip=(
+                "Largest low-shelf cut Low-end EQ can apply. "
+                "The corner below is the halfway point of that shelf. "
+                "Bass and sub strength use the thresholds below. "
+                "The shelf is applied before loudness and true peak are measured again. "
+                "Changing this, the corner, the mode, or those thresholds requires a new analysis."
+            ),
+        )
+        self._low_end_eq_amount = self._number_inputs[-1]
+        self._low_end_eq_corner_cell = self._labeled_number(
+            grid, 3, 0, "Low-end EQ corner", self.app.var_low_end_eq_shelf_hz,
+            MIN_LOW_END_EQ_SHELF_HZ, MAX_LOW_END_EQ_SHELF_HZ, 1, "Hz",
+            integer=True,
+            tooltip=(
+                "Halfway point of the low shelf. "
+                "At 70 Hz, a 6 dB cut is about 5 dB at a 50 Hz sub, 3 dB at 70 Hz, "
+                "and about 1 dB at 100 Hz. "
+                "Changing this requires a new analysis."
+            ),
+        )
+        self._low_end_eq_corner = self._number_inputs[-1]
+
+        self.app._label(
+            grid,
+            text="Bass-heavy tracks",
+            color=FG_MUTED,
+            bg=BG_CARD,
+            size=SETTINGS_TEXT,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(12, 6))
+        bass_treatment_cell = ctk.CTkFrame(grid, fg_color="transparent")
+        bass_treatment_cell.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        bass_treatment_cell.grid_columnconfigure(0, weight=1)
+        self.bass_treatment_menu = ctk.CTkOptionMenu(
+            bass_treatment_cell,
+            variable=self.app.var_bass_treatment,
+            values=list(BASS_TREATMENT_CHOICES),
+            command=self._on_bass_treatment_selected,
+            fg_color=BG_FIELD,
+            button_color=BG_CARD,
+            button_hover_color=ICE_DIM,
+            dropdown_fg_color=BG_FIELD,
+            dropdown_hover_color=ICE_DIM,
+            dropdown_text_color=FG_MAIN,
+            text_color=FG_MAIN,
+            font=self.app._font(TYPE_BODY),
+            dropdown_font=self.app._font(TYPE_BODY),
+            height=32,
+        )
+        self.bass_treatment_menu.grid(row=0, column=0, sticky="ew")
+        self.app._add_tooltip(
+            bass_treatment_cell,
+            (
+                "Off leaves the loudness decision unchanged. "
+                "Level trim pulls broadband gain back on bass-heavy tracks. "
+                "Low-end EQ applies a low shelf at the Low-end EQ corner instead, then measures loudness and true peak again. "
+                "Only one of those can be active. "
+                "Low-end EQ changes the analyzed audio, so that mode, its max cut, its corner, and the thresholds "
+                "below need a new analysis when they change."
+            ),
+            wraplength=420,
         )
 
         lbl_bass_trim_thresholds = self.app._label(
@@ -727,23 +864,23 @@ class PreferencesPage(ctk.CTkFrame):
             bg=BG_CARD,
             size=SETTINGS_TEXT,
         )
-        lbl_bass_trim_thresholds.grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 6))
+        lbl_bass_trim_thresholds.grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 6))
         self.app._add_tooltip(
             lbl_bass_trim_thresholds,
             (
                 "DropGain measures how strong the low end is on each track's loudest section, "
                 "compared to the mids (115-1000 Hz). See bass_strength_db and sub_strength_db in the results table. "
-                "Bass-heavy tracks can feel louder than the LUFS meter suggests, so gain is pulled back slightly: "
-                "less boost, a deeper cut, or a small pulldown even on a track that's already in the target LUFS "
-                "band. These four values set when that pullback starts and when it reaches full strength. "
-                "Max bass-aware trim sets how strong the pullback can get."
+                "Level trim uses that to pull broadband gain back. Low-end EQ uses the same thresholds to set "
+                "how far the low shelf cuts, then measures the filtered track. These four values set when "
+                "that response starts and when it reaches the max amount for the selected mode."
             ),
             wraplength=420,
         )
 
         self._labeled_number(
-            grid, 4, 0, "Bass trim start", self.app.var_bass_penalty_start,
+            grid, 7, 0, "Bass trim start", self.app.var_bass_penalty_start,
             MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
+            remember=self._bass_trim_inputs,
             tooltip=(
                 "How bass-heavy (45-115 Hz) a track must be before any bass-aware trim applies. "
                 "Below this value: no change. Example at default +5 dB: bass strength +4 dB is left alone; "
@@ -751,9 +888,10 @@ class PreferencesPage(ctk.CTkFrame):
             ),
         )
         self._labeled_number(
-            grid, 4, 1, "Bass trim full", self.app.var_bass_penalty_full,
+            grid, 7, 1, "Bass trim full", self.app.var_bass_penalty_full,
             MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
             padx=(0, 0),
+            remember=self._bass_trim_inputs,
             tooltip=(
                 "How bass-heavy a track must be before bass-aware trim reaches Max bass-aware trim. "
                 "Between Start and Full, trim grows smoothly. Example at defaults +5 / +17 dB: "
@@ -762,17 +900,19 @@ class PreferencesPage(ctk.CTkFrame):
             ),
         )
         self._labeled_number(
-            grid, 5, 0, "Sub trim start", self.app.var_sub_penalty_start,
+            grid, 8, 0, "Sub trim start", self.app.var_sub_penalty_start,
             MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
+            remember=self._bass_trim_inputs,
             tooltip=(
                 "Same as Bass trim start, but for sub-bass (20-45 Hz). Sub is usually weaker than mids, "
                 "so this defaults higher than bass start. Below this value: sub contributes no trim."
             ),
         )
         self._labeled_number(
-            grid, 5, 1, "Sub trim full", self.app.var_sub_penalty_full,
+            grid, 8, 1, "Sub trim full", self.app.var_sub_penalty_full,
             MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
             padx=(0, 0),
+            remember=self._bass_trim_inputs,
             tooltip=(
                 "Same as Bass trim full, but for sub-bass. Bass and sub are checked separately; "
                 "whichever asks for more trim wins."
@@ -790,7 +930,7 @@ class PreferencesPage(ctk.CTkFrame):
             checkmark_color=BUTTON_TEXT_DARK,
             font=self.app._font(SETTINGS_TEXT),
         )
-        self.chk_apply_render_gain_threshold.grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        self.chk_apply_render_gain_threshold.grid(row=9, column=0, columnspan=2, sticky="w", pady=(12, 0))
         self.app._add_tooltip(
             self.chk_apply_render_gain_threshold,
             "Off by default for batch runs: render every track that passes safety checks. "
@@ -810,7 +950,8 @@ class PreferencesPage(ctk.CTkFrame):
             checkbox_height=18,
             font=self.app._font(SETTINGS_TEXT),
         )
-        self.chk_allow_risky_true_peak_boost.grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.chk_allow_risky_true_peak_boost.grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self._sync_bass_treatment_controls()
         self.app._add_tooltip(
             self.chk_allow_risky_true_peak_boost,
             "Only use this when you trust the source file and accept the clipping risk.",

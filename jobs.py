@@ -24,6 +24,9 @@ from analysis import (
     DEFAULT_APPLY_RENDER_GAIN_THRESHOLD,
     DEFAULT_BASS_PENALTY_FULL_DB,
     DEFAULT_BASS_PENALTY_START_DB,
+    DEFAULT_BASS_TREATMENT,
+    DEFAULT_LOW_END_EQ_MAX_DB,
+    DEFAULT_LOW_END_EQ_SHELF_HZ,
     DEFAULT_LIMITER_ENGINE,
     DEFAULT_OUTPUT_FORMAT_MODE,
     DEFAULT_SUB_PENALTY_FULL_DB,
@@ -149,6 +152,10 @@ class DropGainSettings:
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB
     sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB
     sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB
+    bass_treatment: str = DEFAULT_BASS_TREATMENT
+    low_end_eq_max_db: float = DEFAULT_LOW_END_EQ_MAX_DB
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ
+    include_subfolders: bool = True
 
 
 class CsvBatchWriter:
@@ -283,6 +290,7 @@ def recompute_row_decision(
         bass_penalty_full_db=settings.bass_penalty_full_db,
         sub_penalty_start_db=settings.sub_penalty_start_db,
         sub_penalty_full_db=settings.sub_penalty_full_db,
+        bass_treatment=settings.bass_treatment,
         allow_risky_true_peak_boost=settings.allow_risky_true_peak_boost,
     )
     apply_track_decision(row, decision, limiter_engine=settings.limiter_engine)
@@ -384,7 +392,7 @@ def run_analysis_job(
     check_ffmpeg_available()
 
     on_progress("status", "Finding audio files...")
-    files = find_audio_files(settings.folder)
+    files = find_audio_files(settings.folder, include_subfolders=settings.include_subfolders)
     total = len(files)
 
     logger.info("Found %s supported original audio files.", total)
@@ -461,6 +469,9 @@ def run_analysis_job(
                 bass_penalty_full_db=settings.bass_penalty_full_db,
                 sub_penalty_start_db=settings.sub_penalty_start_db,
                 sub_penalty_full_db=settings.sub_penalty_full_db,
+                bass_treatment=settings.bass_treatment,
+                low_end_eq_max_db=settings.low_end_eq_max_db,
+                low_end_eq_shelf_hz=settings.low_end_eq_shelf_hz,
                 peak_ceiling=settings.peak_ceiling_dbfs,
                 normalization_mode=settings.normalization_mode,
                 analyze_only=True,
@@ -913,6 +924,7 @@ def run_processing_job(
                 limiter_engine=settings.limiter_engine,
                 post_loudness_window_seconds=settings.window_seconds,
                 post_loudness_hop_seconds=settings.hop_seconds,
+                low_end_eq_shelf_hz=settings.low_end_eq_shelf_hz,
             )
 
             with write_lock:

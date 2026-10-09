@@ -23,7 +23,7 @@ from typing import Literal, TypeAlias, TypedDict
 try:
     import numpy as np
     import pyloudnorm as pyln
-    from scipy.signal import resample_poly
+    from scipy.signal import lfilter, resample_poly
 except ImportError as exc:
     raise RuntimeError(
         "Required Python packages were not found.\n\n"
@@ -123,6 +123,26 @@ DEFAULT_MAX_REDUCTION_DB = 3.0
 DEFAULT_BASS_MAX_BOOST_REDUCTION_DB = 0.80
 MIN_BASS_MAX_BOOST_REDUCTION_DB = 0.0
 MAX_BASS_MAX_BOOST_REDUCTION_DB = 3.0
+
+BASS_TREATMENT_OFF = "Off"
+BASS_TREATMENT_LEVEL_TRIM = "Level trim"
+BASS_TREATMENT_LOW_END_EQ = "Low-end EQ"
+BASS_TREATMENT_CHOICES = (
+    BASS_TREATMENT_OFF,
+    BASS_TREATMENT_LEVEL_TRIM,
+    BASS_TREATMENT_LOW_END_EQ,
+)
+DEFAULT_BASS_TREATMENT = BASS_TREATMENT_LEVEL_TRIM
+
+# Minimum-phase RBJ low shelf. S=1 is the steepest monotonic shelf (second order).
+# The corner is the halfway point of the shelf, not the frequency of the full cut.
+DEFAULT_LOW_END_EQ_SHELF_HZ = 70.0
+MIN_LOW_END_EQ_SHELF_HZ = 20.0
+MAX_LOW_END_EQ_SHELF_HZ = 200.0
+LOW_END_EQ_SHELF_SLOPE = 1.0
+DEFAULT_LOW_END_EQ_MAX_DB = 1.5
+MIN_LOW_END_EQ_MAX_DB = 0.0
+MAX_LOW_END_EQ_MAX_DB = 6.0
 
 NORMALIZATION_MODE_LIMITER_ASSISTED = "Limiter-assisted"
 NORMALIZATION_MODE_CLEAN_GAIN = "Clean gain"
@@ -271,6 +291,7 @@ TrackRowKey: TypeAlias = Literal[
     "bass_strength_db",
     "sub_strength_db",
     "bass_adjustment_db",
+    "low_end_eq_db",
     "limiter_budget_db",
     "limiter_budget_adjustment_db",
     "raw_gain_db",
@@ -338,6 +359,7 @@ class TrackRow(TypedDict):
     bass_strength_db: TrackRowNumber
     sub_strength_db: TrackRowNumber
     bass_adjustment_db: TrackRowNumber
+    low_end_eq_db: TrackRowNumber
     limiter_budget_db: TrackRowNumber
     limiter_budget_adjustment_db: TrackRowNumber
     raw_gain_db: TrackRowNumber
@@ -403,6 +425,7 @@ CSV_FIELDNAMES: tuple[TrackRowKey, ...] = (
     "bass_strength_db",
     "sub_strength_db",
     "bass_adjustment_db",
+    "low_end_eq_db",
     "limiter_budget_db",
     "limiter_budget_adjustment_db",
     "raw_gain_db",
@@ -841,6 +864,8 @@ def measure_section_and_whole_true_peak_oversampled(
     sample_rate: int | None = None,
     section_failure_label: str = "section true peak measurement failed",
     whole_failure_label: str = "whole-track true peak measurement failed",
+    low_end_eq_db: float = 0.0,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> tuple[float | None, float | None, str]:
     """Measure section and whole-track true peaks from one decode and oversample pass."""
     section_true_peak: float | None = None
@@ -850,6 +875,13 @@ def measure_section_and_whole_true_peak_oversampled(
     try:
         channels, sample_rate = _resolve_true_peak_channels_and_rate(path, channels, sample_rate)
         audio = decode_audio_ffmpeg_for_true_peak(path, channels)
+        if float(low_end_eq_db) > 0.01:
+            audio = apply_low_shelf(
+                audio,
+                sample_rate,
+                -float(low_end_eq_db),
+                corner_hz=low_end_eq_shelf_hz,
+            )
         oversampled, oversample_factor = _oversample_audio_for_true_peak(audio)
     except Exception as exc:
         notes = append_note(notes, f"{whole_failure_label}: {exc}")
@@ -940,6 +972,30 @@ def normalize_normalization_mode(value: object) -> str:
     return DEFAULT_NORMALIZATION_MODE
 
 
+def clamp_low_end_eq_shelf_hz(value: object) -> float:
+    """Return a low-shelf corner inside the settings range."""
+    try:
+        hz = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return DEFAULT_LOW_END_EQ_SHELF_HZ
+    return max(MIN_LOW_END_EQ_SHELF_HZ, min(MAX_LOW_END_EQ_SHELF_HZ, hz))
+
+
+def normalize_bass_treatment(value: object) -> str:
+    """Return a valid bass-treatment mode, falling back to level trim."""
+    text = str(value or "").strip()
+    if text in BASS_TREATMENT_CHOICES:
+        return text
+    return DEFAULT_BASS_TREATMENT
+
+
+def bass_treatment_for_saved_max(bass_max_reduction_db: float) -> str:
+    """Return Off when a saved max trim is zero, otherwise level trim."""
+    if float(bass_max_reduction_db) <= 0.01:
+        return BASS_TREATMENT_OFF
+    return BASS_TREATMENT_LEVEL_TRIM
+
+
 def normalize_limiter_engine(value: object) -> str:
     """Return a valid limiter engine string, falling back to the default."""
     text = str(value or "").strip()
@@ -1027,14 +1083,20 @@ def min_abs_gain_for_extension(
     return lossless_val
 
 
-def find_audio_files(root_dir: str) -> list[str]:
-    """Recursively find supported audio files, skipping already-processed copies."""
+def find_audio_files(root_dir: str, *, include_subfolders: bool = True) -> list[str]:
+    """Find supported audio files, skipping already-processed copies.
+
+    include_subfolders walks every folder under root_dir. When false, only
+    files sitting directly in root_dir are returned.
+    """
     paths: list[str] = []
 
     def ignore_walk_error(_error: OSError) -> None:
         return
 
-    for dirpath, _dirnames, filenames in os.walk(root_dir, onerror=ignore_walk_error):
+    for dirpath, dirnames, filenames in os.walk(root_dir, onerror=ignore_walk_error):
+        if not include_subfolders:
+            dirnames.clear()
         for filename in filenames:
             p = Path(filename)
             suffix = p.suffix.lower()
@@ -1517,6 +1579,103 @@ def measure_sub_strength_db(
     )
 
 
+def low_shelf_coeffs(
+    gain_db: float,
+    sample_rate: int,
+    corner_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
+    slope: float = LOW_END_EQ_SHELF_SLOPE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return RBJ low-shelf biquad coefficients (b, a), a[0] normalized to 1."""
+    sr = float(sample_rate)
+    if sr <= 0.0:
+        raise RuntimeError("low shelf sample rate must be positive")
+    freq = min(float(corner_hz), sr * 0.45)
+    amplitude = 10.0 ** (float(gain_db) / 40.0)
+    omega = 2.0 * math.pi * freq / sr
+    cos_w = math.cos(omega)
+    sin_w = math.sin(omega)
+    shelf_slope = max(0.001, float(slope))
+    alpha = (sin_w / 2.0) * math.sqrt((amplitude + 1.0 / amplitude) * (1.0 / shelf_slope - 1.0) + 2.0)
+    sqrt_a = math.sqrt(amplitude)
+    b0 = amplitude * ((amplitude + 1.0) - (amplitude - 1.0) * cos_w + 2.0 * sqrt_a * alpha)
+    b1 = 2.0 * amplitude * ((amplitude - 1.0) - (amplitude + 1.0) * cos_w)
+    b2 = amplitude * ((amplitude + 1.0) - (amplitude - 1.0) * cos_w - 2.0 * sqrt_a * alpha)
+    a0 = (amplitude + 1.0) + (amplitude - 1.0) * cos_w + 2.0 * sqrt_a * alpha
+    a1 = -2.0 * ((amplitude - 1.0) + (amplitude + 1.0) * cos_w)
+    a2 = (amplitude + 1.0) + (amplitude - 1.0) * cos_w - 2.0 * sqrt_a * alpha
+    b = np.array([b0, b1, b2], dtype=np.float64) / a0
+    a = np.array([1.0, a1 / a0, a2 / a0], dtype=np.float64)
+    return b, a
+
+
+def apply_low_shelf(
+    audio: np.ndarray,
+    sample_rate: int,
+    gain_db: float,
+    corner_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
+) -> np.ndarray:
+    """Apply one minimum-phase low shelf. Each channel uses the same coefficients."""
+    gain = float(gain_db)
+    if abs(gain) < 0.01 or audio.size == 0:
+        return audio
+
+    b, a = low_shelf_coeffs(gain, sample_rate, corner_hz=clamp_low_end_eq_shelf_hz(corner_hz))
+    source = np.asarray(audio, dtype=np.float64)
+    if source.ndim == 1:
+        filtered = lfilter(b, a, source)
+    else:
+        filtered = np.empty_like(source)
+        for channel in range(source.shape[1]):
+            filtered[:, channel] = lfilter(b, a, np.ascontiguousarray(source[:, channel]))
+    return filtered.astype(audio.dtype, copy=False)
+
+
+def low_end_eq_cut_db(
+    bass_strength_db: float | None,
+    sub_strength_db: float | None,
+    *,
+    bass_treatment: str,
+    low_end_eq_max_db: float,
+    bass_penalty_start_db: float,
+    bass_penalty_full_db: float,
+    sub_penalty_start_db: float,
+    sub_penalty_full_db: float,
+) -> float:
+    """Return the low-shelf cut for Low-end EQ, or 0 for any other mode."""
+    if normalize_bass_treatment(bass_treatment) != BASS_TREATMENT_LOW_END_EQ:
+        return 0.0
+    return bass_aware_gain_trim_db(
+        bass_strength_db,
+        sub_strength_db,
+        bass_max_reduction_db=low_end_eq_max_db,
+        bass_penalty_start_db=bass_penalty_start_db,
+        bass_penalty_full_db=bass_penalty_full_db,
+        sub_penalty_start_db=sub_penalty_start_db,
+        sub_penalty_full_db=sub_penalty_full_db,
+    )
+
+
+def remeasure_after_low_end_eq(
+    audio: np.ndarray,
+    meter: pyln.Meter,
+    *,
+    sample_rate: int,
+    cut_db: float,
+    section_start_sec: float,
+    section_end_sec: float,
+    corner_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
+) -> tuple[np.ndarray, float, float, float]:
+    """Filter audio, then return it with integrated LUFS, section LUFS, and sample peak."""
+    filtered = apply_low_shelf(audio, sample_rate, -float(cut_db), corner_hz=corner_hz)
+    sample_peak_dbfs = dbfs(float(np.max(np.abs(filtered))))
+    meter_input = audio_for_loudness_meter(filtered)
+    integrated = measure_lufs_input(meter, meter_input)
+    start = max(0, int(round(float(section_start_sec) * sample_rate)))
+    end = min(int(meter_input.shape[0]), max(start + 1, int(round(float(section_end_sec) * sample_rate))))
+    section_lufs = measure_lufs_input(meter, meter_input[start:end])
+    return filtered, integrated, section_lufs, sample_peak_dbfs
+
+
 def bass_aware_gain_trim_db(
     bass_strength_db: float | None,
     sub_strength_db: float | None,
@@ -1740,6 +1899,7 @@ def decide_from_measurements(
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
     sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
     sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
+    bass_treatment: str = DEFAULT_BASS_TREATMENT,
     allow_risky_true_peak_boost: bool = False,
     true_peak_measurements_present: bool = True,
 ) -> TrackDecision:
@@ -1778,15 +1938,18 @@ def decide_from_measurements(
     if gain_notes:
         decision_notes = append_note(decision_notes, gain_notes)
 
-    bass_adjustment = bass_aware_gain_trim_db(
-        bass_strength,
-        sub_strength,
-        bass_max_reduction_db=bass_max_reduction_db,
-        bass_penalty_start_db=bass_penalty_start_db,
-        bass_penalty_full_db=bass_penalty_full_db,
-        sub_penalty_start_db=sub_penalty_start_db,
-        sub_penalty_full_db=sub_penalty_full_db,
-    )
+    if normalize_bass_treatment(bass_treatment) == BASS_TREATMENT_LEVEL_TRIM:
+        bass_adjustment = bass_aware_gain_trim_db(
+            bass_strength,
+            sub_strength,
+            bass_max_reduction_db=bass_max_reduction_db,
+            bass_penalty_start_db=bass_penalty_start_db,
+            bass_penalty_full_db=bass_penalty_full_db,
+            sub_penalty_start_db=sub_penalty_start_db,
+            sub_penalty_full_db=sub_penalty_full_db,
+        )
+    else:
+        bass_adjustment = 0.0
     if bass_adjustment > 0.01:
         if suggested_gain > 0.01:
             suggested_gain -= min(suggested_gain, bass_adjustment)
@@ -1936,6 +2099,7 @@ def decision_from_row(
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
     sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
     sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
+    bass_treatment: str = DEFAULT_BASS_TREATMENT,
     allow_risky_true_peak_boost: bool = False,
 ) -> TrackDecision:
     """Recompute decision fields for an existing analyzed row."""
@@ -1972,6 +2136,7 @@ def decision_from_row(
         bass_penalty_full_db=bass_penalty_full_db,
         sub_penalty_start_db=sub_penalty_start_db,
         sub_penalty_full_db=sub_penalty_full_db,
+        bass_treatment=bass_treatment,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=not true_peak_unreliable,
     )
@@ -1990,6 +2155,9 @@ def analyze_file(
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
     sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
     sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
+    bass_treatment: str = DEFAULT_BASS_TREATMENT,
+    low_end_eq_max_db: float = DEFAULT_LOW_END_EQ_MAX_DB,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
     normalization_mode: str = DEFAULT_NORMALIZATION_MODE,
     output_root: str | None = None,
     source_root: str | None = None,
@@ -2047,31 +2215,6 @@ def analyze_file(
         )
 
     warnings = ""
-    with benchmark_timer("true peak"):
-        section_true_peak_dbtp, whole_true_peak_dbtp, true_peak_note = measure_section_and_whole_true_peak_oversampled(
-            path,
-            section_start,
-            section_end,
-            channels=channels,
-            sample_rate=original_sample_rate,
-        )
-    if true_peak_note:
-        warnings = append_note(warnings, true_peak_note)
-
-    true_peak_measurements = [
-        measurement
-        for measurement in (section_true_peak_dbtp, whole_true_peak_dbtp)
-        if measurement is not None
-    ]
-    if true_peak_measurements:
-        true_peak_dbtp = max(true_peak_measurements)
-    else:
-        true_peak_dbtp = sample_peak_dbfs
-        warnings = append_note(
-            warnings,
-            "true peak measurement failed; sample peak used for peak estimate",
-        )
-
     bass_strength: float | None = None
     sub_strength: float | None = None
     with benchmark_timer("bass/sub analysis"):
@@ -2095,6 +2238,60 @@ def analyze_file(
         except Exception as exc:
             warnings = append_note(warnings, f"sub analysis skipped: {exc}")
 
+    shelf_hz = clamp_low_end_eq_shelf_hz(low_end_eq_shelf_hz)
+    low_end_eq_db = low_end_eq_cut_db(
+        bass_strength,
+        sub_strength,
+        bass_treatment=bass_treatment,
+        low_end_eq_max_db=low_end_eq_max_db,
+        bass_penalty_start_db=bass_penalty_start_db,
+        bass_penalty_full_db=bass_penalty_full_db,
+        sub_penalty_start_db=sub_penalty_start_db,
+        sub_penalty_full_db=sub_penalty_full_db,
+    )
+    if low_end_eq_db > 0.01:
+        try:
+            with benchmark_timer("low-end EQ"):
+                audio, integrated, loudest, sample_peak_dbfs = remeasure_after_low_end_eq(
+                    audio,
+                    meter,
+                    sample_rate=METER_SAMPLE_RATE,
+                    cut_db=low_end_eq_db,
+                    section_start_sec=section_start,
+                    section_end_sec=section_end,
+                    corner_hz=shelf_hz,
+                )
+        except Exception as exc:
+            warnings = append_note(warnings, f"low-end EQ skipped: {exc}")
+            low_end_eq_db = 0.0
+
+    with benchmark_timer("true peak"):
+        section_true_peak_dbtp, whole_true_peak_dbtp, true_peak_note = measure_section_and_whole_true_peak_oversampled(
+            path,
+            section_start,
+            section_end,
+            channels=channels,
+            sample_rate=original_sample_rate,
+            low_end_eq_db=low_end_eq_db,
+            low_end_eq_shelf_hz=shelf_hz,
+        )
+    if true_peak_note:
+        warnings = append_note(warnings, true_peak_note)
+
+    true_peak_measurements = [
+        measurement
+        for measurement in (section_true_peak_dbtp, whole_true_peak_dbtp)
+        if measurement is not None
+    ]
+    if true_peak_measurements:
+        true_peak_dbtp = max(true_peak_measurements)
+    else:
+        true_peak_dbtp = sample_peak_dbfs
+        warnings = append_note(
+            warnings,
+            "true peak measurement failed; sample peak used for peak estimate",
+        )
+
     decision = decide_from_measurements(
         loudest_lufs=loudest,
         sample_peak_dbfs=sample_peak_dbfs,
@@ -2115,9 +2312,15 @@ def analyze_file(
         bass_penalty_full_db=bass_penalty_full_db,
         sub_penalty_start_db=sub_penalty_start_db,
         sub_penalty_full_db=sub_penalty_full_db,
+        bass_treatment=bass_treatment,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=bool(true_peak_measurements),
     )
+    if low_end_eq_db > 0.01:
+        decision.decision_notes = append_note(
+            decision.decision_notes,
+            f"low-end EQ shelf -{low_end_eq_db:.2f} dB at {shelf_hz:.0f} Hz",
+        )
     if decision.manual_check_required == "yes":
         warnings = append_note(
             warnings,
@@ -2166,6 +2369,7 @@ def analyze_file(
         "bass_strength_db": round_or_blank(bass_strength, 2),
         "sub_strength_db": round_or_blank(sub_strength, 2),
         "bass_adjustment_db": decision.bass_adjustment_db,
+        "low_end_eq_db": round_or_blank(low_end_eq_db, 2),
         "limiter_budget_db": decision.limiter_budget_db,
         "limiter_budget_adjustment_db": decision.limiter_budget_adjustment_db,
         "raw_gain_db": decision.raw_gain_db,

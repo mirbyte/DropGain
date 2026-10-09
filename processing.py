@@ -55,8 +55,12 @@ except ImportError as exc:
     ) from exc
 
 from analysis import (
+    apply_low_shelf,
     DEFAULT_BASS_PENALTY_FULL_DB,
     DEFAULT_BASS_PENALTY_START_DB,
+    DEFAULT_BASS_TREATMENT,
+    DEFAULT_LOW_END_EQ_MAX_DB,
+    DEFAULT_LOW_END_EQ_SHELF_HZ,
     DEFAULT_OUTPUT_FORMAT_MODE,
     DEFAULT_SUB_PENALTY_FULL_DB,
     DEFAULT_SUB_PENALTY_START_DB,
@@ -1731,6 +1735,8 @@ def process_audio_with_clean_gain(
     source_info: dict[str, object],
     *,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    low_end_eq_db: float = 0.0,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> dict[str, object]:
     """Render with transparent linear gain only; no limiter/plugin is touched."""
     ext = Path(input_path).suffix.lower()
@@ -1750,6 +1756,7 @@ def process_audio_with_clean_gain(
 
     with benchmark_timer("render"):
         audio = decode_audio_ffmpeg_at_sample_rate(input_path, channels, sr)
+        audio = apply_low_shelf(audio, sr, -low_end_eq_db, corner_hz=low_end_eq_shelf_hz)
         processed = apply_linear_gain(audio, gain_db)
         encode_float_audio_ffmpeg(
             processed,
@@ -2597,6 +2604,8 @@ def _process_audio_with_prol2_gain_impl(
     post_loudness_end_sec: float | None = None,
     post_target_high_lufs: float | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    low_end_eq_db: float = 0.0,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> dict[str, object]:
     """Render audio through FabFilter Pro-L 2 on the dedicated host thread.
 
@@ -2625,6 +2634,7 @@ def _process_audio_with_prol2_gain_impl(
 
     with benchmark_timer("render"):
         audio = decode_audio_ffmpeg_at_sample_rate(input_path, channels, sr)
+        audio = apply_low_shelf(audio, sr, -low_end_eq_db, corner_hz=low_end_eq_shelf_hz)
         padded_output_level_dbfs = float(output_level_dbfs) - PROL2_TRUE_PEAK_CALIBRATION_DB
         compensated_drive_db = float(gain_db) - padded_output_level_dbfs
         pre_limiter_gain_db = min(compensated_drive_db, 0.0)
@@ -2711,6 +2721,8 @@ def process_audio_with_prol2_gain(
     post_loudness_end_sec: float | None = None,
     post_target_high_lufs: float | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    low_end_eq_db: float = 0.0,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> dict[str, object]:
     """Render audio through FabFilter Pro-L 2 and encode to the target format."""
     return get_prol2_render_host().run(
@@ -2728,6 +2740,8 @@ def process_audio_with_prol2_gain(
         post_loudness_end_sec,
         post_target_high_lufs,
         output_format_mode,
+        low_end_eq_db,
+        low_end_eq_shelf_hz,
     )
 
 
@@ -2742,6 +2756,8 @@ def _process_audio_with_loudmax_gain_impl(
     post_loudness_end_sec: float | None = None,
     post_target_high_lufs: float | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    low_end_eq_db: float = 0.0,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> dict[str, object]:
     """Render audio through LoudMax on the dedicated host thread.
 
@@ -2773,6 +2789,7 @@ def _process_audio_with_loudmax_gain_impl(
 
     with benchmark_timer("render"):
         audio = decode_audio_ffmpeg_at_sample_rate(input_path, channels, sr)
+        audio = apply_low_shelf(audio, sr, -low_end_eq_db, corner_hz=low_end_eq_shelf_hz)
 
         padded_output_level_dbfs = float(output_level_dbfs) - LOUDMAX_TRUE_PEAK_CALIBRATION_DB
         compensated_drive_db = (
@@ -2854,6 +2871,8 @@ def process_audio_with_loudmax_gain(
     post_loudness_end_sec: float | None = None,
     post_target_high_lufs: float | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    low_end_eq_db: float = 0.0,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> dict[str, object]:
     """Render audio through LoudMax and encode to the target format."""
     return get_prol2_render_host().run(
@@ -2868,6 +2887,8 @@ def process_audio_with_loudmax_gain(
         post_loudness_end_sec,
         post_target_high_lufs,
         output_format_mode,
+        low_end_eq_db,
+        low_end_eq_shelf_hz,
     )
 
 
@@ -2885,6 +2906,8 @@ def process_audio_with_gain(
     post_target_high_lufs: float | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
     limiter_engine: str = DEFAULT_LIMITER_ENGINE,
+    low_end_eq_db: float = 0.0,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> dict[str, object]:
     """Limiter-assisted processing path, routed to the selected limiter engine.
 
@@ -2902,6 +2925,8 @@ def process_audio_with_gain(
             post_loudness_end_sec=post_loudness_end_sec,
             post_target_high_lufs=post_target_high_lufs,
             output_format_mode=output_format_mode,
+            low_end_eq_db=low_end_eq_db,
+            low_end_eq_shelf_hz=low_end_eq_shelf_hz,
         )
 
     return process_audio_with_prol2_gain(
@@ -2917,6 +2942,8 @@ def process_audio_with_gain(
         post_loudness_end_sec=post_loudness_end_sec,
         post_target_high_lufs=post_target_high_lufs,
         output_format_mode=output_format_mode,
+        low_end_eq_db=low_end_eq_db,
+        low_end_eq_shelf_hz=low_end_eq_shelf_hz,
     )
 
 
@@ -2937,6 +2964,8 @@ def is_zero_gain_mp3_render(row: TrackRow) -> bool:
         return False
 
     gain = parse_float_or_default(row["suggested_gain_db"], 0.0)
+    if parse_float_or_default(row.get("low_end_eq_db"), 0.0) > 0.01:
+        return False
     if abs(gain) >= EFFECTIVE_ZERO_GAIN_DB:
         return False
     if row_needs_true_peak_safety_render(row, gain):
@@ -2990,6 +3019,7 @@ def should_process_row(
     needs_true_peak_safety = row_needs_true_peak_safety_render(row, gain)
     needs_limiter_peak_control = row_should_use_limiter(row)
     needs_final_mp3_peak_safety = row_needs_final_mp3_peak_safety(row)
+    needs_low_end_eq = parse_float_or_default(row.get("low_end_eq_db"), 0.0) > 0.01
 
     if apply_gain_threshold:
         min_gain = min_abs_gain_for_extension(
@@ -3000,6 +3030,7 @@ def should_process_row(
             and not needs_true_peak_safety
             and not needs_limiter_peak_control
             and not needs_final_mp3_peak_safety
+            and not needs_low_end_eq
         ):
             if str(row.get("action", "")) == "leave":
                 return False, "already_in_target_range"
@@ -3226,6 +3257,7 @@ def render_analyzed_row(
     limiter_engine: str = DEFAULT_LIMITER_ENGINE,
     post_loudness_window_seconds: float | None = None,
     post_loudness_hop_seconds: float | None = None,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> tuple[str, str, str, str]:
     """Render one analyzed row using cached source metadata.
 
@@ -3236,6 +3268,7 @@ def render_analyzed_row(
     """
     output_path = row["output_path"]
     gain = parse_float_or_default(row["suggested_gain_db"], 0.0)
+    low_end_eq_db = max(0.0, parse_float_or_default(row.get("low_end_eq_db"), 0.0))
     output_format_mode = row.get("output_format_mode", DEFAULT_OUTPUT_FORMAT_MODE)
     use_limiter = row_should_use_limiter(row)
     row["processing_engine"] = processing_engine_for_limiter(limiter_engine) if use_limiter else PROCESSING_ENGINE_CLEAN_GAIN
@@ -3274,6 +3307,8 @@ def render_analyzed_row(
             post_target_high_lufs=target_high_lufs,
             output_format_mode=output_format_mode,
             limiter_engine=limiter_engine,
+            low_end_eq_db=low_end_eq_db,
+            low_end_eq_shelf_hz=low_end_eq_shelf_hz,
         )
         metadata_status, metadata_message, audio_status, audio_message = finalize_render_attempt(output_info)
 
@@ -3303,6 +3338,8 @@ def render_analyzed_row(
                 post_target_high_lufs=target_high_lufs,
                 output_format_mode=output_format_mode,
                 limiter_engine=limiter_engine,
+                low_end_eq_db=low_end_eq_db,
+                low_end_eq_shelf_hz=low_end_eq_shelf_hz,
             )
             metadata_status, metadata_message, audio_status, audio_message = finalize_render_attempt(output_info)
     else:
@@ -3312,6 +3349,8 @@ def render_analyzed_row(
             gain_db=gain,
             source_info=source_info,
             output_format_mode=output_format_mode,
+            low_end_eq_db=low_end_eq_db,
+            low_end_eq_shelf_hz=low_end_eq_shelf_hz,
         )
         metadata_status, metadata_message, audio_status, audio_message = finalize_render_attempt(output_info)
 
@@ -3335,6 +3374,8 @@ def render_analyzed_row(
                 gain_db=gain,
                 source_info=source_info,
                 output_format_mode=output_format_mode,
+                low_end_eq_db=low_end_eq_db,
+                low_end_eq_shelf_hz=low_end_eq_shelf_hz,
             )
             metadata_status, metadata_message, audio_status, audio_message = finalize_render_attempt(output_info)
 
@@ -3372,6 +3413,9 @@ def process_track(
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
     sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
     sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
+    bass_treatment: str = DEFAULT_BASS_TREATMENT,
+    low_end_eq_max_db: float = DEFAULT_LOW_END_EQ_MAX_DB,
+    low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
 ) -> tuple[TrackRow | None, str, dict[str, object] | None]:
     """Analyze one track, optionally render it, and return row, error, source info.
 
@@ -3406,6 +3450,9 @@ def process_track(
             bass_penalty_full_db=bass_penalty_full_db,
             sub_penalty_start_db=sub_penalty_start_db,
             sub_penalty_full_db=sub_penalty_full_db,
+            bass_treatment=bass_treatment,
+            low_end_eq_max_db=low_end_eq_max_db,
+            low_end_eq_shelf_hz=low_end_eq_shelf_hz,
             normalization_mode=normalization_mode,
             source_info=resolved_source_info,
             output_format_mode=output_format_mode,
@@ -3447,6 +3494,7 @@ def process_track(
                 limiter_engine=limiter_engine,
                 post_loudness_window_seconds=window_seconds,
                 post_loudness_hop_seconds=hop_seconds,
+                low_end_eq_shelf_hz=low_end_eq_shelf_hz,
             )
 
         else:

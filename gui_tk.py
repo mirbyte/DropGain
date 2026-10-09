@@ -45,8 +45,15 @@ from analysis import (
     DEFAULT_LOUD_SECTION_WINDOW_SECONDS,
     DEFAULT_MAX_REDUCTION_DB,
     DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
+    DEFAULT_BASS_TREATMENT,
+    DEFAULT_LOW_END_EQ_MAX_DB,
+    MIN_LOW_END_EQ_MAX_DB,
+    MAX_LOW_END_EQ_MAX_DB,
+    DEFAULT_LOW_END_EQ_SHELF_HZ,
+    clamp_low_end_eq_shelf_hz,
     MIN_BASS_MAX_BOOST_REDUCTION_DB,
     MAX_BASS_MAX_BOOST_REDUCTION_DB,
+    BASS_TREATMENT_LOW_END_EQ,
     DEFAULT_BASS_PENALTY_START_DB,
     DEFAULT_BASS_PENALTY_FULL_DB,
     DEFAULT_SUB_PENALTY_START_DB,
@@ -70,11 +77,13 @@ from analysis import (
     OUTPUT_FORMAT_MP3_TO_AIFF,
     OUTPUT_FORMAT_PRESERVE,
     PROCESSED_SUFFIX,
+    bass_treatment_for_saved_max,
     benchmark_timer,
     check_ffmpeg_available,
     default_csv_path,
     format_peak_control_display,
     hidden_subprocess_kwargs,
+    normalize_bass_treatment,
     normalize_limiter_engine,
     normalize_normalization_mode,
     normalize_output_format_mode,
@@ -139,7 +148,7 @@ SETTING_CHANGE_DEBOUNCE_MS = 200
 SAVE_SETTINGS_DEBOUNCE_MS = 500
 RESULTS_TABLE_RESIZE_DEBOUNCE_MS = 50
 SETTINGS_FILE_NAME = "dropgain_settings.json"
-SETTINGS_SCHEMA_VERSION = 1
+SETTINGS_SCHEMA_VERSION = 2
 
 LOG_FILE_NAME = "dropgain.log"
 CRASH_LOG_FILE_NAME = "dropgain_crash.log"
@@ -425,6 +434,22 @@ class App(WaveformMixin, ctk.CTk):
         if "apply_render_gain_threshold" not in upgraded:
             upgraded["apply_render_gain_threshold"] = DEFAULT_APPLY_RENDER_GAIN_THRESHOLD
 
+        if "bass_treatment" not in upgraded or not str(upgraded.get("bass_treatment") or "").strip():
+            try:
+                saved_max = float(upgraded.get("bass_max_reduction", DEFAULT_BASS_MAX_BOOST_REDUCTION_DB))
+            except (TypeError, ValueError):
+                saved_max = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB
+            upgraded["bass_treatment"] = bass_treatment_for_saved_max(saved_max)
+        else:
+            upgraded["bass_treatment"] = normalize_bass_treatment(upgraded.get("bass_treatment"))
+
+        if "low_end_eq_max" not in upgraded:
+            upgraded["low_end_eq_max"] = DEFAULT_LOW_END_EQ_MAX_DB
+        if "low_end_eq_shelf_hz" not in upgraded:
+            upgraded["low_end_eq_shelf_hz"] = DEFAULT_LOW_END_EQ_SHELF_HZ
+        else:
+            upgraded["low_end_eq_shelf_hz"] = clamp_low_end_eq_shelf_hz(upgraded.get("low_end_eq_shelf_hz"))
+
         upgraded["settings_schema_version"] = SETTINGS_SCHEMA_VERSION
         return upgraded
 
@@ -483,6 +508,9 @@ class App(WaveformMixin, ctk.CTk):
                 "hop_seconds": float(self.var_hop.get()),
                 "workers": int(float(self.var_workers.get())),
                 "max_reduction": float(self.var_max_reduction.get()),
+                "bass_treatment": normalize_bass_treatment(self.var_bass_treatment.get()),
+                "low_end_eq_max": float(self.var_low_end_eq_max.get()),
+                "low_end_eq_shelf_hz": clamp_low_end_eq_shelf_hz(self.var_low_end_eq_shelf_hz.get()),
                 "bass_max_reduction": float(self.var_bass_max_reduction.get()),
                 "bass_penalty_start": float(self.var_bass_penalty_start.get()),
                 "bass_penalty_full": float(self.var_bass_penalty_full.get()),
@@ -496,6 +524,7 @@ class App(WaveformMixin, ctk.CTk):
                 "output_format_mode": normalize_output_format_mode(self.var_output_format_mode.get()),
                 "allow_risky_true_peak_boost": bool(self.var_allow_risky_true_peak_boost.get()),
                 "apply_render_gain_threshold": bool(self.var_apply_render_gain_threshold.get()),
+                "include_subfolders": bool(self.var_include_subfolders.get()),
                 "write_csv": bool(self.var_write_csv.get()),
             }
         except Exception:
@@ -1275,12 +1304,30 @@ class App(WaveformMixin, ctk.CTk):
         self.var_output_folder = tk.StringVar(value=str(settings.get("last_output_folder") or ""))
         self.var_csv = tk.StringVar(value=default_csv_path(self.var_folder.get().strip()))
         self.var_write_csv = tk.BooleanVar(value=self._setting_bool(settings, "write_csv", True))
+        self.var_include_subfolders = tk.BooleanVar(
+            value=self._setting_bool(settings, "include_subfolders", True)
+        )
         self.var_window = tk.DoubleVar(value=self._setting_float(settings, "window_seconds", DEFAULT_LOUD_SECTION_WINDOW_SECONDS))
         self.var_hop = tk.DoubleVar(value=self._setting_float(settings, "hop_seconds", DEFAULT_LOUD_SECTION_HOP_SECONDS))
         self.var_workers = tk.IntVar(value=self._setting_int(settings, "workers", DEFAULT_ANALYSIS_WORKER_THREADS))
         self.var_target_low = tk.DoubleVar(value=self._setting_float(settings, "target_low", DEFAULT_TARGET_LOW_LUFS))
         self.var_target_high = tk.DoubleVar(value=self._setting_float(settings, "target_high", DEFAULT_TARGET_HIGH_LUFS))
         self.var_max_reduction = tk.DoubleVar(value=self._setting_float(settings, "max_reduction", DEFAULT_MAX_REDUCTION_DB))
+        if str(settings.get("bass_treatment") or "").strip():
+            bass_treatment = normalize_bass_treatment(settings.get("bass_treatment"))
+        else:
+            bass_treatment = bass_treatment_for_saved_max(
+                self._setting_float(settings, "bass_max_reduction", DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
+            )
+        self.var_bass_treatment = tk.StringVar(value=bass_treatment)
+        self.var_low_end_eq_max = tk.DoubleVar(
+            value=self._setting_float(settings, "low_end_eq_max", DEFAULT_LOW_END_EQ_MAX_DB)
+        )
+        self.var_low_end_eq_shelf_hz = tk.IntVar(
+            value=int(clamp_low_end_eq_shelf_hz(
+                self._setting_float(settings, "low_end_eq_shelf_hz", DEFAULT_LOW_END_EQ_SHELF_HZ)
+            ))
+        )
         self.var_bass_max_reduction = tk.DoubleVar(
             value=self._setting_float(settings, "bass_max_reduction", DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
         )
@@ -1661,6 +1708,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_window,
             self.var_hop,
             self.var_workers,
+            self.var_include_subfolders,
         ):
             var.trace_add("write", self._on_analysis_setting_changed)
         for var in (
@@ -1668,10 +1716,6 @@ class App(WaveformMixin, ctk.CTk):
             self.var_target_high,
             self.var_max_reduction,
             self.var_bass_max_reduction,
-            self.var_bass_penalty_start,
-            self.var_bass_penalty_full,
-            self.var_sub_penalty_start,
-            self.var_sub_penalty_full,
             self.var_peak_ceiling,
             self.var_mp3_threshold,
             self.var_lossless_threshold,
@@ -1681,6 +1725,16 @@ class App(WaveformMixin, ctk.CTk):
             self.var_allow_risky_true_peak_boost,
         ):
             var.trace_add("write", self._on_decision_setting_changed)
+        for var in (
+            self.var_bass_treatment,
+            self.var_low_end_eq_max,
+            self.var_low_end_eq_shelf_hz,
+            self.var_bass_penalty_start,
+            self.var_bass_penalty_full,
+            self.var_sub_penalty_start,
+            self.var_sub_penalty_full,
+        ):
+            var.trace_add("write", self._on_bass_setting_changed)
         self.var_apply_render_gain_threshold.trace_add("write", self._on_render_rule_setting_changed)
         self.var_write_csv.trace_add("write", self._on_non_analysis_setting_changed)
         self.var_output_folder.trace_add("write", self._on_decision_setting_changed)
@@ -1706,12 +1760,30 @@ class App(WaveformMixin, ctk.CTk):
         folder: str,
         window_seconds: float,
         hop_seconds: float,
+        include_subfolders: bool,
+        bass_treatment: str,
+        low_end_eq_max_db: float,
+        low_end_eq_shelf_hz: float,
+        bass_penalty_start_db: float,
+        bass_penalty_full_db: float,
+        sub_penalty_start_db: float,
+        sub_penalty_full_db: float,
     ) -> dict[str, object]:
-        return {
+        signature: dict[str, object] = {
             "folder": cls._normalized_folder_signature(folder),
             "window_seconds": cls._rounded(window_seconds),
             "hop_seconds": cls._rounded(hop_seconds),
+            "include_subfolders": bool(include_subfolders),
         }
+        if normalize_bass_treatment(bass_treatment) == BASS_TREATMENT_LOW_END_EQ:
+            signature["bass_treatment"] = BASS_TREATMENT_LOW_END_EQ
+            signature["low_end_eq_max_db"] = cls._rounded(low_end_eq_max_db)
+            signature["low_end_eq_shelf_hz"] = cls._rounded(low_end_eq_shelf_hz, 0)
+            signature["bass_penalty_start_db"] = cls._rounded(bass_penalty_start_db)
+            signature["bass_penalty_full_db"] = cls._rounded(bass_penalty_full_db)
+            signature["sub_penalty_start_db"] = cls._rounded(sub_penalty_start_db)
+            signature["sub_penalty_full_db"] = cls._rounded(sub_penalty_full_db)
+        return signature
 
     def _current_analysis_signature(self) -> dict[str, object] | None:
         try:
@@ -1719,6 +1791,29 @@ class App(WaveformMixin, ctk.CTk):
                 folder=self.var_folder.get().strip(),
                 window_seconds=max(1.0, float(self.var_window.get())),
                 hop_seconds=max(1.0, float(self.var_hop.get())),
+                include_subfolders=bool(self.var_include_subfolders.get()),
+                bass_treatment=normalize_bass_treatment(self.var_bass_treatment.get()),
+                low_end_eq_max_db=max(
+                    MIN_LOW_END_EQ_MAX_DB,
+                    min(MAX_LOW_END_EQ_MAX_DB, float(self.var_low_end_eq_max.get())),
+                ),
+                low_end_eq_shelf_hz=clamp_low_end_eq_shelf_hz(self.var_low_end_eq_shelf_hz.get()),
+                bass_penalty_start_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_start.get())),
+                ),
+                bass_penalty_full_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_full.get())),
+                ),
+                sub_penalty_start_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_start.get())),
+                ),
+                sub_penalty_full_db=max(
+                    MIN_BASS_PENALTY_THRESHOLD_DB,
+                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
+                ),
             )
         except Exception:
             return None
@@ -1737,8 +1832,31 @@ class App(WaveformMixin, ctk.CTk):
             "folder": "folder",
             "window_seconds": "analysis window",
             "hop_seconds": "analysis hop",
+            "include_subfolders": "include subfolders",
+            "bass_treatment": "bass-heavy tracks",
+            "low_end_eq_max_db": "max low-end EQ",
+            "low_end_eq_shelf_hz": "low-end EQ corner",
+            "bass_penalty_start_db": "bass trim start",
+            "bass_penalty_full_db": "bass trim full",
+            "sub_penalty_start_db": "sub trim start",
+            "sub_penalty_full_db": "sub trim full",
         }
         return [labels[key] for key in labels if current.get(key) != previous.get(key)]
+
+    def _low_end_eq_requires_reanalysis(self) -> bool:
+        current = self._current_analysis_signature()
+        previous = self._analysis_signature
+        if current is None or previous is None:
+            return False
+        return current != previous
+
+    def _on_bass_setting_changed(self, *args: Any) -> None:
+        if self._setting_change_blocked():
+            return
+        if self._low_end_eq_requires_reanalysis():
+            self._on_analysis_setting_changed()
+        else:
+            self._on_decision_setting_changed()
 
     def _on_output_format_mode_selected(self, _choice: str) -> None:
         self._refresh_output_format_hint()
@@ -1839,6 +1957,8 @@ class App(WaveformMixin, ctk.CTk):
                     self.library_tuning_page.refresh_from_app()
 
         self._set_idle_state()
+        if self.preferences_page is not None:
+            self.preferences_page._sync_bass_treatment_controls()
 
     def _on_render_rule_setting_changed(self, *args: Any) -> None:
         if self._setting_change_blocked():
@@ -2412,6 +2532,9 @@ class App(WaveformMixin, ctk.CTk):
             self.var_target_low.set(DEFAULT_TARGET_LOW_LUFS)
             self.var_target_high.set(DEFAULT_TARGET_HIGH_LUFS)
             self.var_max_reduction.set(DEFAULT_MAX_REDUCTION_DB)
+            self.var_bass_treatment.set(DEFAULT_BASS_TREATMENT)
+            self.var_low_end_eq_max.set(DEFAULT_LOW_END_EQ_MAX_DB)
+            self.var_low_end_eq_shelf_hz.set(int(DEFAULT_LOW_END_EQ_SHELF_HZ))
             self.var_bass_max_reduction.set(DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
             self.var_bass_penalty_start.set(DEFAULT_BASS_PENALTY_START_DB)
             self.var_bass_penalty_full.set(DEFAULT_BASS_PENALTY_FULL_DB)
@@ -2425,6 +2548,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_output_format_mode.set(DEFAULT_OUTPUT_FORMAT_MODE)
             self.var_allow_risky_true_peak_boost.set(False)
             self.var_apply_render_gain_threshold.set(DEFAULT_APPLY_RENDER_GAIN_THRESHOLD)
+            self.var_include_subfolders.set(True)
             self.var_write_csv.set(True)
             self.var_output_folder.set("")
         finally:
@@ -2633,6 +2757,12 @@ class App(WaveformMixin, ctk.CTk):
                 MIN_BASS_PENALTY_THRESHOLD_DB,
                 min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
             )
+            bass_treatment = normalize_bass_treatment(self.var_bass_treatment.get())
+            low_end_eq_max = max(
+                MIN_LOW_END_EQ_MAX_DB,
+                min(MAX_LOW_END_EQ_MAX_DB, float(self.var_low_end_eq_max.get())),
+            )
+            low_end_eq_shelf_hz = clamp_low_end_eq_shelf_hz(self.var_low_end_eq_shelf_hz.get())
             peak_ceiling = float(self.var_peak_ceiling.get())
             normalization_mode = normalize_normalization_mode(self.var_normalization_mode.get())
             limiter_engine = normalize_limiter_engine(self.var_limiter_engine.get())
@@ -2642,6 +2772,7 @@ class App(WaveformMixin, ctk.CTk):
             output_format_mode = normalize_output_format_mode(self.var_output_format_mode.get())
             allow_risky_true_peak_boost = bool(self.var_allow_risky_true_peak_boost.get())
             apply_render_gain_threshold = bool(self.var_apply_render_gain_threshold.get())
+            include_subfolders = bool(self.var_include_subfolders.get())
             output_root = self.var_output_folder.get().strip() or None
         except Exception as exc:
             messagebox.showerror("Invalid settings", f"Check the numeric settings.\n\n{exc}")
@@ -2657,11 +2788,20 @@ class App(WaveformMixin, ctk.CTk):
 
         self.var_workers.set(workers)
         self.var_normalization_mode.set(normalization_mode)
+        self.var_bass_treatment.set(bass_treatment)
 
         run_signature = self._analysis_signature_from_values(
             folder=folder,
             window_seconds=window_seconds,
             hop_seconds=hop_seconds,
+            include_subfolders=include_subfolders,
+            bass_treatment=bass_treatment,
+            low_end_eq_max_db=low_end_eq_max,
+            low_end_eq_shelf_hz=low_end_eq_shelf_hz,
+            bass_penalty_start_db=bass_penalty_start,
+            bass_penalty_full_db=bass_penalty_full,
+            sub_penalty_start_db=sub_penalty_start,
+            sub_penalty_full_db=sub_penalty_full,
         )
 
         if pipeline == "review_render" and run_signature != self._analysis_signature:
@@ -2705,6 +2845,15 @@ class App(WaveformMixin, ctk.CTk):
         self._logger.info("-" * 78)
         self._logger.info("Mode:   %s", mode_text)
         self._logger.info("Gain:   %s", normalization_mode)
+        if bass_treatment == BASS_TREATMENT_LOW_END_EQ:
+            self._logger.info(
+                "Bass:   %s (max %.2f dB, corner %.0f Hz)",
+                bass_treatment,
+                low_end_eq_max,
+                low_end_eq_shelf_hz,
+            )
+        else:
+            self._logger.info("Bass:   %s", bass_treatment)
         self._logger.info("Limiter: %s", limiter_engine)
         if pipeline == "review_render":
             self._logger.info("Analysis workers: not used")
@@ -2713,6 +2862,7 @@ class App(WaveformMixin, ctk.CTk):
         self._logger.info("Render workers: %s (clean gain); limiter stays single-threaded", DEFAULT_RENDER_WORKER_THREADS)
         self._logger.info("Priority: true-peak ceiling, then loudness target")
         self._logger.info("Folder: %s", folder)
+        self._logger.info("Subfolders: %s", "included" if include_subfolders else "top folder only")
         if output_root:
             self._logger.info("Output folder: %s", output_root)
         else:
@@ -2749,6 +2899,9 @@ class App(WaveformMixin, ctk.CTk):
                 bass_penalty_full,
                 sub_penalty_start,
                 sub_penalty_full,
+                bass_treatment,
+                low_end_eq_max,
+                low_end_eq_shelf_hz,
                 peak_ceiling,
                 normalization_mode,
                 limiter_engine,
@@ -2760,6 +2913,7 @@ class App(WaveformMixin, ctk.CTk):
                 output_format_mode,
                 allow_risky_true_peak_boost,
                 apply_render_gain_threshold,
+                include_subfolders,
                 output_root,
                 all_analyzed_rows,
                 all_analyzed_work_items,
@@ -2836,6 +2990,9 @@ class App(WaveformMixin, ctk.CTk):
         bass_penalty_full: float,
         sub_penalty_start: float,
         sub_penalty_full: float,
+        bass_treatment: str,
+        low_end_eq_max: float,
+        low_end_eq_shelf_hz: float,
         peak_ceiling: float,
         normalization_mode: str,
         limiter_engine: str,
@@ -2847,6 +3004,7 @@ class App(WaveformMixin, ctk.CTk):
         output_format_mode: str,
         allow_risky_true_peak_boost: bool,
         apply_render_gain_threshold: bool,
+        include_subfolders: bool,
         output_root: str | None,
         all_analyzed_rows: list[dict[str, object]],
         all_analyzed_work_items: dict[str, AnalyzedWorkItem],
@@ -2866,6 +3024,9 @@ class App(WaveformMixin, ctk.CTk):
                 bass_penalty_full_db=bass_penalty_full,
                 sub_penalty_start_db=sub_penalty_start,
                 sub_penalty_full_db=sub_penalty_full,
+                bass_treatment=bass_treatment,
+                low_end_eq_max_db=low_end_eq_max,
+                low_end_eq_shelf_hz=low_end_eq_shelf_hz,
                 peak_ceiling_dbfs=peak_ceiling,
                 normalization_mode=normalization_mode,
                 limiter_engine=limiter_engine,
@@ -2878,6 +3039,7 @@ class App(WaveformMixin, ctk.CTk):
                 output_format_mode=output_format_mode,
                 allow_risky_true_peak_boost=allow_risky_true_peak_boost,
                 apply_render_gain_threshold=apply_render_gain_threshold,
+                include_subfolders=include_subfolders,
                 output_root=output_root,
             )
 
@@ -3231,6 +3393,12 @@ class App(WaveformMixin, ctk.CTk):
                     MIN_BASS_PENALTY_THRESHOLD_DB,
                     min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
                 ),
+                bass_treatment=normalize_bass_treatment(self.var_bass_treatment.get()),
+                low_end_eq_max_db=max(
+                    MIN_LOW_END_EQ_MAX_DB,
+                    min(MAX_LOW_END_EQ_MAX_DB, float(self.var_low_end_eq_max.get())),
+                ),
+                low_end_eq_shelf_hz=clamp_low_end_eq_shelf_hz(self.var_low_end_eq_shelf_hz.get()),
                 peak_ceiling_dbfs=float(self.var_peak_ceiling.get()),
                 normalization_mode=normalize_normalization_mode(self.var_normalization_mode.get()),
                 limiter_engine=normalize_limiter_engine(self.var_limiter_engine.get()),
@@ -3243,6 +3411,7 @@ class App(WaveformMixin, ctk.CTk):
                 output_format_mode=normalize_output_format_mode(self.var_output_format_mode.get()),
                 allow_risky_true_peak_boost=bool(self.var_allow_risky_true_peak_boost.get()),
                 apply_render_gain_threshold=bool(self.var_apply_render_gain_threshold.get()),
+                include_subfolders=bool(self.var_include_subfolders.get()),
                 output_root=self.var_output_folder.get().strip() or None,
             )
         except Exception:
