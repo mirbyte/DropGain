@@ -148,7 +148,7 @@ SETTING_CHANGE_DEBOUNCE_MS = 200
 SAVE_SETTINGS_DEBOUNCE_MS = 500
 RESULTS_TABLE_RESIZE_DEBOUNCE_MS = 50
 SETTINGS_FILE_NAME = "dropgain_settings.json"
-SETTINGS_SCHEMA_VERSION = 2
+SETTINGS_SCHEMA_VERSION = 3
 
 LOG_FILE_NAME = "dropgain.log"
 CRASH_LOG_FILE_NAME = "dropgain_crash.log"
@@ -426,6 +426,10 @@ class App(WaveformMixin, ctk.CTk):
 
     def _upgrade_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
         upgraded = dict(settings)
+        try:
+            previous_schema = int(upgraded.get("settings_schema_version") or 0)
+        except (TypeError, ValueError):
+            previous_schema = 0
 
         if "output_format_mode" not in upgraded:
             upgraded["output_format_mode"] = DEFAULT_OUTPUT_FORMAT_MODE
@@ -445,6 +449,13 @@ class App(WaveformMixin, ctk.CTk):
 
         if "low_end_eq_max" not in upgraded:
             upgraded["low_end_eq_max"] = DEFAULT_LOW_END_EQ_MAX_DB
+        elif previous_schema < 3:
+            try:
+                saved_low_end_eq_max = float(upgraded["low_end_eq_max"])
+            except (TypeError, ValueError):
+                saved_low_end_eq_max = DEFAULT_LOW_END_EQ_MAX_DB
+            if abs(saved_low_end_eq_max - 1.5) < 0.001:
+                upgraded["low_end_eq_max"] = DEFAULT_LOW_END_EQ_MAX_DB
         if "low_end_eq_shelf_hz" not in upgraded:
             upgraded["low_end_eq_shelf_hz"] = DEFAULT_LOW_END_EQ_SHELF_HZ
         else:
@@ -1315,6 +1326,8 @@ class App(WaveformMixin, ctk.CTk):
         self.var_max_reduction = tk.DoubleVar(value=self._setting_float(settings, "max_reduction", DEFAULT_MAX_REDUCTION_DB))
         if str(settings.get("bass_treatment") or "").strip():
             bass_treatment = normalize_bass_treatment(settings.get("bass_treatment"))
+        elif not settings:
+            bass_treatment = DEFAULT_BASS_TREATMENT
         else:
             bass_treatment = bass_treatment_for_saved_max(
                 self._setting_float(settings, "bass_max_reduction", DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)

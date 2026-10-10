@@ -132,7 +132,7 @@ BASS_TREATMENT_CHOICES = (
     BASS_TREATMENT_LEVEL_TRIM,
     BASS_TREATMENT_LOW_END_EQ,
 )
-DEFAULT_BASS_TREATMENT = BASS_TREATMENT_LEVEL_TRIM
+DEFAULT_BASS_TREATMENT = BASS_TREATMENT_LOW_END_EQ
 
 # Minimum-phase RBJ low shelf. S=1 is the steepest monotonic shelf (second order).
 # The corner is the halfway point of the shelf, not the frequency of the full cut.
@@ -140,9 +140,9 @@ DEFAULT_LOW_END_EQ_SHELF_HZ = 70.0
 MIN_LOW_END_EQ_SHELF_HZ = 20.0
 MAX_LOW_END_EQ_SHELF_HZ = 200.0
 LOW_END_EQ_SHELF_SLOPE = 1.0
-DEFAULT_LOW_END_EQ_MAX_DB = 1.5
+DEFAULT_LOW_END_EQ_MAX_DB = 3.0
 MIN_LOW_END_EQ_MAX_DB = 0.0
-MAX_LOW_END_EQ_MAX_DB = 6.0
+MAX_LOW_END_EQ_MAX_DB = 10.0
 
 NORMALIZATION_MODE_LIMITER_ASSISTED = "Limiter-assisted (recommended)"
 NORMALIZATION_MODE_CLEAN_GAIN = "Clean gain"
@@ -986,7 +986,7 @@ def normalize_bass_treatment(value: object) -> str:
     text = str(value or "").strip()
     if text in BASS_TREATMENT_CHOICES:
         return text
-    return DEFAULT_BASS_TREATMENT
+    return BASS_TREATMENT_LEVEL_TRIM
 
 
 def bass_treatment_for_saved_max(bass_max_reduction_db: float) -> str:
