@@ -42,7 +42,7 @@ from analysis import (
     find_audio_files,
     is_limiter_processing_engine,
     make_error_track_row,
-    processed_output_path,
+    output_paths_for_sources,
     format_peak_control_display,
     parse_float_or_default,
     row_to_csv_dict,
@@ -156,6 +156,7 @@ class DropGainSettings:
     low_end_eq_max_db: float = DEFAULT_LOW_END_EQ_MAX_DB
     low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ
     include_subfolders: bool = True
+    include_source_format: bool = True
 
 
 class CsvBatchWriter:
@@ -321,19 +322,29 @@ def recompute_rows_decisions(
         recompute_row_decision(settings, row, apply_gain_threshold=apply_gain_threshold)
 
 
+def assign_row_output_paths(settings: DropGainSettings, rows: list[TrackRow]) -> None:
+    """Set each row's output path, numbering names that would otherwise collide."""
+    assigned = output_paths_for_sources(
+        [str(row.get("path") or "") for row in rows],
+        output_root=settings.output_root,
+        source_root=settings.folder,
+        output_format_mode=settings.output_format_mode,
+        include_source_format=settings.include_source_format,
+    )
+    for row in rows:
+        path = str(row.get("path") or "")
+        if path not in assigned:
+            continue
+        row["output_format_mode"] = settings.output_format_mode
+        row["output_path"] = assigned[path]
+
+
 def recompute_rows_for_settings(
     settings: DropGainSettings,
     rows: list[TrackRow],
 ) -> None:
     """Refresh output paths/format for every row, then recompute decisions."""
-    for row in rows:
-        row["output_format_mode"] = settings.output_format_mode
-        row["output_path"] = processed_output_path(
-            row["path"],
-            output_root=settings.output_root,
-            source_root=settings.folder,
-            output_format_mode=settings.output_format_mode,
-        )
+    assign_row_output_paths(settings, rows)
     recompute_rows_decisions(
         settings,
         rows,
@@ -393,6 +404,13 @@ def run_analysis_job(
 
     on_progress("status", "Finding audio files...")
     files = find_audio_files(settings.folder, include_subfolders=settings.include_subfolders)
+    output_path_by_source = output_paths_for_sources(
+        files,
+        output_root=settings.output_root,
+        source_root=settings.folder,
+        output_format_mode=settings.output_format_mode,
+        include_source_format=settings.include_source_format,
+    )
     total = len(files)
 
     logger.info("Found %s supported original audio files.", total)
@@ -484,6 +502,8 @@ def run_analysis_job(
                 source_root=settings.folder,
                 source_folder_name=source_folder_name,
                 limiter_engine=settings.limiter_engine,
+                include_source_format=settings.include_source_format,
+                output_path=output_path_by_source.get(path),
             )
 
             if error_msg:
@@ -496,6 +516,8 @@ def run_analysis_job(
                         source_root=settings.folder,
                         source_folder_name=source_folder_name,
                         output_format_mode=settings.output_format_mode,
+                        include_source_format=settings.include_source_format,
+                        output_path=output_path_by_source.get(path),
                     )
                     if row is not None:
                         error_row["processing_status"] = "error"
@@ -541,6 +563,8 @@ def run_analysis_job(
                         source_root=settings.folder,
                         source_folder_name=source_folder_name,
                         output_format_mode=settings.output_format_mode,
+                        include_source_format=settings.include_source_format,
+                        output_path=output_path_by_source.get(path),
                     )
                     all_rows.append(error_row)
                     _write_csv_row(
@@ -630,6 +654,8 @@ def run_analysis_job(
                     source_root=settings.folder,
                     source_folder_name=source_folder_name,
                     output_format_mode=settings.output_format_mode,
+                    include_source_format=settings.include_source_format,
+                    output_path=output_path_by_source.get(path),
                 )
                 all_rows.append(error_row)
                 _write_csv_row(
@@ -797,6 +823,7 @@ def run_processing_job(
     rendered. Rows are rechecked before rendering. Cached source metadata is
     reused when work_items proves the source file is unchanged.
     """
+    assign_row_output_paths(settings, all_rows)
     if render_indices is None:
         render_indices = eligible_render_indices(
             settings,
@@ -907,12 +934,6 @@ def run_processing_job(
         path = row["path"]
 
         try:
-            row["output_path"] = processed_output_path(
-                path,
-                output_root=settings.output_root,
-                source_root=settings.folder,
-                output_format_mode=settings.output_format_mode,
-            )
             source_info = _resolve_render_source_info(path, cached_work_items)
             gain = parse_float_or_default(row["suggested_gain_db"], 0.0)
             render_analyzed_row(

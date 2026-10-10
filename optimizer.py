@@ -297,6 +297,7 @@ def _settings_with_targets(
         mp3_threshold=current.mp3_threshold,
         lossless_threshold=current.lossless_threshold,
         output_format_mode=current.output_format_mode,
+        include_source_format=current.include_source_format,
         allow_risky_true_peak_boost=current.allow_risky_true_peak_boost,
         apply_render_gain_threshold=current.apply_render_gain_threshold,
     )

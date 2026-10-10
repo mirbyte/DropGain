@@ -3416,6 +3416,8 @@ def process_track(
     bass_treatment: str = DEFAULT_BASS_TREATMENT,
     low_end_eq_max_db: float = DEFAULT_LOW_END_EQ_MAX_DB,
     low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
+    include_source_format: bool = True,
+    output_path: str | None = None,
 ) -> tuple[TrackRow | None, str, dict[str, object] | None]:
     """Analyze one track, optionally render it, and return row, error, source info.
 
@@ -3461,6 +3463,8 @@ def process_track(
             source_root=source_root,
             source_folder_name=source_folder_name,
             limiter_engine=limiter_engine,
+            include_source_format=include_source_format,
+            output_path=output_path,
         )
 
         use_limiter = row_should_use_limiter(row)

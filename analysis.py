@@ -576,18 +576,22 @@ def processed_output_path(
     output_root: str | None = None,
     source_root: str | None = None,
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    include_source_format: bool = True,
 ) -> str:
     """Build the output path by adding PROCESSED_SUFFIX, preserving subfolders.
 
-    When the selected output mode changes the file extension, the source
-    extension is added to the filename to avoid collisions such as Track.flac
-    and Track.wav both rendering to Track_flac_DG.aiff and Track_wav_DG.aiff.
+    When include_source_format is set and the output extension differs from the
+    source, the source extension is added to the filename so Track.flac and
+    Track.wav do not both become Track_DG.aiff. Callers that still collide
+    after this pass should use output_paths_for_sources.
     """
     p = Path(input_path)
     mode = normalize_output_format_mode(output_format_mode)
     suffix = output_extension_for_source(p.suffix, mode)
     source_ext = p.suffix.lower()
-    source_ext_marker = f"_{source_ext.lstrip('.')}" if suffix.lower() != source_ext else ""
+    source_ext_marker = ""
+    if include_source_format and suffix.lower() != source_ext:
+        source_ext_marker = f"_{source_ext.lstrip('.')}"
     output_name = f"{p.stem}{source_ext_marker}{PROCESSED_SUFFIX}{suffix}"
 
     if output_root:
@@ -604,6 +608,73 @@ def processed_output_path(
         return str(root / output_name)
 
     return str(p.with_name(output_name))
+
+
+def is_processed_copy_stem(stem: str) -> bool:
+    """Return True for a DropGain copy, including collision names such as Track_DG (1)."""
+    folded = stem.casefold()
+    suffix = PROCESSED_SUFFIX.casefold()
+    if folded.endswith(suffix):
+        return True
+    marker = " ("
+    open_at = folded.rfind(marker)
+    if open_at < 0 or not folded.endswith(")"):
+        return False
+    number = folded[open_at + len(marker):-1]
+    if not number.isdigit():
+        return False
+    return folded[:open_at].endswith(suffix)
+
+
+def numbered_collision_path(path: str, number: int) -> str:
+    """Keep number 0 unchanged. Later copies become 'name (1).ext', 'name (2).ext'."""
+    if number <= 0:
+        return path
+    p = Path(path)
+    return str(p.with_name(f"{p.stem} ({number}){p.suffix}"))
+
+
+def disambiguate_output_paths(source_to_output: dict[str, str]) -> dict[str, str]:
+    """Give each source a unique output path.
+
+    Sources are ordered by path. The first keeps the plain name. The rest get
+    (1), (2), and so on, so the same pair keeps the same names on the next run.
+    """
+    groups: dict[str, list[str]] = {}
+    for source, output in source_to_output.items():
+        groups.setdefault(normalized_path(output), []).append(source)
+
+    assigned: dict[str, str] = {}
+    for sources in groups.values():
+        ordered = sorted(sources, key=normalized_path)
+        preferred = source_to_output[ordered[0]]
+        for index, source in enumerate(ordered):
+            assigned[source] = numbered_collision_path(preferred, index)
+    return assigned
+
+
+def output_paths_for_sources(
+    source_paths: list[str],
+    *,
+    output_root: str | None = None,
+    source_root: str | None = None,
+    output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    include_source_format: bool = True,
+) -> dict[str, str]:
+    """Return a collision-free output path for every source path."""
+    preferred = {
+        path: processed_output_path(
+            path,
+            output_root=output_root,
+            source_root=source_root,
+            output_format_mode=output_format_mode,
+            include_source_format=include_source_format,
+        )
+        for path in source_paths
+        if path
+    }
+    return disambiguate_output_paths(preferred)
+
 
 def hidden_subprocess_kwargs() -> dict[str, int]:
     """Return subprocess kwargs that hide the console window on Windows."""
@@ -644,6 +715,8 @@ def make_error_track_row(
     source_root: str | None = None,
     source_folder_name: str = "",
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
+    include_source_format: bool = True,
+    output_path: str | None = None,
 ) -> TrackRow:
     """Build a minimal TrackRow for a file that failed before analysis completed."""
     row = {field: "" for field in CSV_FIELDNAMES}
@@ -652,10 +725,12 @@ def make_error_track_row(
     row.update(
         {
             "path": path,
-            "output_path": processed_output_path(
+            "output_path": output_path
+            or processed_output_path(
                 path,
                 source_root=source_root,
                 output_format_mode=output_format_mode,
+                include_source_format=include_source_format,
             ),
             "filename": source_path.name,
             "source_folder_name": source_folder_name,
@@ -1105,7 +1180,7 @@ def find_audio_files(root_dir: str, *, include_subfolders: bool = True) -> list[
             if suffix not in SUPPORTED_EXTENSIONS:
                 continue
 
-            if SKIP_ALREADY_PROCESSED_FILES_IN_SCAN and stem.casefold().endswith(PROCESSED_SUFFIX.casefold()):
+            if SKIP_ALREADY_PROCESSED_FILES_IN_SCAN and is_processed_copy_stem(stem):
                 continue
 
             paths.append(os.path.join(dirpath, filename))
@@ -2166,6 +2241,8 @@ def analyze_file(
     output_format_mode: object = DEFAULT_OUTPUT_FORMAT_MODE,
     allow_risky_true_peak_boost: bool = False,
     limiter_engine: str = DEFAULT_LIMITER_ENGINE,
+    include_source_format: bool = True,
+    output_path: str | None = None,
 ) -> TrackRow:
     """Analyze a single audio file and return a populated TrackRow dict.
 
@@ -2329,11 +2406,13 @@ def analyze_file(
 
     return {
         "path": path,
-        "output_path": processed_output_path(
+        "output_path": output_path
+        or processed_output_path(
             path,
             output_root=output_root,
             source_root=source_root,
             output_format_mode=output_format_mode,
+            include_source_format=include_source_format,
         ),
         "filename": os.path.basename(path),
         "source_folder_name": source_folder_name,

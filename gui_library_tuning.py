@@ -589,6 +589,7 @@ class LibraryTuningPage(ctk.CTkFrame):
             mp3_threshold=settings.mp3_threshold,
             lossless_threshold=settings.lossless_threshold,
             output_format_mode=settings.output_format_mode,
+            include_source_format=settings.include_source_format,
             allow_risky_true_peak_boost=settings.allow_risky_true_peak_boost,
             apply_render_gain_threshold=settings.apply_render_gain_threshold,
         )

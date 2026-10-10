@@ -536,6 +536,7 @@ class App(WaveformMixin, ctk.CTk):
                 "allow_risky_true_peak_boost": bool(self.var_allow_risky_true_peak_boost.get()),
                 "apply_render_gain_threshold": bool(self.var_apply_render_gain_threshold.get()),
                 "include_subfolders": bool(self.var_include_subfolders.get()),
+                "include_source_format": bool(self.var_include_source_format.get()),
                 "write_csv": bool(self.var_write_csv.get()),
             }
         except Exception:
@@ -1371,6 +1372,9 @@ class App(WaveformMixin, ctk.CTk):
         self.var_output_format_mode = tk.StringVar(
             value=normalize_output_format_mode(settings.get("output_format_mode", DEFAULT_OUTPUT_FORMAT_MODE))
         )
+        self.var_include_source_format = tk.BooleanVar(
+            value=self._setting_bool(settings, "include_source_format", True)
+        )
         self.var_allow_risky_true_peak_boost = tk.BooleanVar(
             value=self._setting_bool(settings, "allow_risky_true_peak_boost", False)
         )
@@ -1735,6 +1739,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_normalization_mode,
             self.var_limiter_engine,
             self.var_output_format_mode,
+            self.var_include_source_format,
             self.var_allow_risky_true_peak_boost,
         ):
             var.trace_add("write", self._on_decision_setting_changed)
@@ -2559,6 +2564,7 @@ class App(WaveformMixin, ctk.CTk):
             self.var_mp3_threshold.set(MP3_MIN_ABS_GAIN_DB)
             self.var_lossless_threshold.set(LOSSLESS_MIN_ABS_GAIN_DB)
             self.var_output_format_mode.set(DEFAULT_OUTPUT_FORMAT_MODE)
+            self.var_include_source_format.set(True)
             self.var_allow_risky_true_peak_boost.set(False)
             self.var_apply_render_gain_threshold.set(DEFAULT_APPLY_RENDER_GAIN_THRESHOLD)
             self.var_include_subfolders.set(True)
@@ -2786,6 +2792,7 @@ class App(WaveformMixin, ctk.CTk):
             allow_risky_true_peak_boost = bool(self.var_allow_risky_true_peak_boost.get())
             apply_render_gain_threshold = bool(self.var_apply_render_gain_threshold.get())
             include_subfolders = bool(self.var_include_subfolders.get())
+            include_source_format = bool(self.var_include_source_format.get())
             output_root = self.var_output_folder.get().strip() or None
         except Exception as exc:
             messagebox.showerror("Invalid settings", f"Check the numeric settings.\n\n{exc}")
@@ -2882,6 +2889,10 @@ class App(WaveformMixin, ctk.CTk):
             self._logger.info("Output folder: beside originals (%s suffix)", PROCESSED_SUFFIX)
         self._logger.info("CSV:    %s", csv_path if write_csv else "disabled")
         self._logger.info("Output: %s", output_format_mode_description(output_format_mode))
+        self._logger.info(
+            "Filename: %s",
+            "source format + DG" if include_source_format else "DG",
+        )
         self._logger.info("-" * 78)
         if pipeline == "analyze_only":
             self._logger.info("Analyze Library run. No processed copies will be created.")
@@ -2927,6 +2938,7 @@ class App(WaveformMixin, ctk.CTk):
                 allow_risky_true_peak_boost,
                 apply_render_gain_threshold,
                 include_subfolders,
+                include_source_format,
                 output_root,
                 all_analyzed_rows,
                 all_analyzed_work_items,
@@ -3018,6 +3030,7 @@ class App(WaveformMixin, ctk.CTk):
         allow_risky_true_peak_boost: bool,
         apply_render_gain_threshold: bool,
         include_subfolders: bool,
+        include_source_format: bool,
         output_root: str | None,
         all_analyzed_rows: list[dict[str, object]],
         all_analyzed_work_items: dict[str, AnalyzedWorkItem],
@@ -3053,6 +3066,7 @@ class App(WaveformMixin, ctk.CTk):
                 allow_risky_true_peak_boost=allow_risky_true_peak_boost,
                 apply_render_gain_threshold=apply_render_gain_threshold,
                 include_subfolders=include_subfolders,
+                include_source_format=include_source_format,
                 output_root=output_root,
             )
 
@@ -3425,6 +3439,7 @@ class App(WaveformMixin, ctk.CTk):
                 allow_risky_true_peak_boost=bool(self.var_allow_risky_true_peak_boost.get()),
                 apply_render_gain_threshold=bool(self.var_apply_render_gain_threshold.get()),
                 include_subfolders=bool(self.var_include_subfolders.get()),
+                include_source_format=bool(self.var_include_source_format.get()),
                 output_root=self.var_output_folder.get().strip() or None,
             )
         except Exception:

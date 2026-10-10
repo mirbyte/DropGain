@@ -403,6 +403,7 @@ class PreferencesPage(ctk.CTkFrame):
             self.chk_allow_risky_true_peak_boost,
             self.chk_apply_render_gain_threshold,
             self.chk_include_subfolders,
+            self.chk_include_source_format,
             self.chk_write_csv,
             self.csv_display,
             self.btn_system_check,
@@ -696,6 +697,27 @@ class PreferencesPage(ctk.CTkFrame):
         self.lbl_output_format_hint.grid(row=2, column=0, sticky="ew")
         self.lbl_output_format_hint.grid_remove()
         self._bind_card_wraplength(card, self.lbl_output_format_hint)
+
+        self.chk_include_source_format = ctk.CTkCheckBox(
+            card,
+            text="Include source format in filename",
+            variable=self.app.var_include_source_format,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER,
+            border_color=BORDER_COLOR,
+            text_color=FG_MAIN,
+            checkmark_color=BUTTON_TEXT_DARK,
+            checkbox_width=18,
+            checkbox_height=18,
+            font=self.app._font(SETTINGS_TEXT),
+        )
+        self.chk_include_source_format.grid(row=3, column=0, sticky="w", pady=(12, 0))
+        self.app._add_tooltip(
+            self.chk_include_source_format,
+            "On: when the output format changes, the source format stays in the name "
+            "(Track_flac_DG.aiff). Off: the name is Track_DG.aiff. If that name is already "
+            "used, later files become Track_DG (1), Track_DG (2).",
+        )
 
     def _build_analysis_card(self, card: ctk.CTkFrame) -> None:
         self._subheading(card, 0, "ANALYSIS")
