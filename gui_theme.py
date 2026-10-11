@@ -254,14 +254,14 @@ RESULTS_TABLE_COLUMNS = (
         "Bass",
         "e",
         "+12.34 dB",
-        "45-115 Hz strength relative to the 115-1000 Hz reference band. Higher values can trigger bass-aware gain trim.",
+        "45-65 Hz strength relative to the 100-1000 Hz reference band. Higher values can trigger bass-aware gain trim.",
     ),
     (
         "sub_strength",
         "Sub",
         "e",
         "+12.34 dB",
-        "20-45 Hz strength relative to the 115-1000 Hz reference band. Higher values can trigger bass-aware gain trim.",
+        "20-45 Hz strength relative to the 100-1000 Hz reference band. Higher values can trigger bass-aware gain trim.",
     ),
     (
         "status",

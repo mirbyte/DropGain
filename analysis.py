@@ -140,7 +140,7 @@ DEFAULT_LOW_END_EQ_SHELF_HZ = 70.0
 MIN_LOW_END_EQ_SHELF_HZ = 20.0
 MAX_LOW_END_EQ_SHELF_HZ = 200.0
 LOW_END_EQ_SHELF_SLOPE = 1.0
-DEFAULT_LOW_END_EQ_MAX_DB = 3.0
+DEFAULT_LOW_END_EQ_MAX_DB = 4.0
 MIN_LOW_END_EQ_MAX_DB = 0.0
 MAX_LOW_END_EQ_MAX_DB = 10.0
 
@@ -236,17 +236,17 @@ POST_VERIFY_LUFS_TOLERANCE = 0.40
 POST_VERIFY_PEAK_TOLERANCE_DB = 0.20
 
 BASS_ANALYSIS_LOW_HZ = 45.0
-BASS_ANALYSIS_HIGH_HZ = 115.0
-BASS_REFERENCE_LOW_HZ = 115.0
+BASS_ANALYSIS_HIGH_HZ = 65.0
+BASS_REFERENCE_LOW_HZ = 100.0
 BASS_REFERENCE_HIGH_HZ = 1000.0
-DEFAULT_BASS_PENALTY_START_DB = 5.0
-DEFAULT_BASS_PENALTY_FULL_DB = 17.0
+DEFAULT_BASS_PENALTY_START_DB = 17.0
+DEFAULT_BASS_PENALTY_FULL_DB = 21.0
 BASS_ANALYSIS_FFT_SIZE = 16_384
 
 SUB_ANALYSIS_LOW_HZ = 20.0
 SUB_ANALYSIS_HIGH_HZ = 45.0
-DEFAULT_SUB_PENALTY_START_DB = 8.0
-DEFAULT_SUB_PENALTY_FULL_DB = 17.0
+DEFAULT_SUB_PENALTY_START_DB = 14.0
+DEFAULT_SUB_PENALTY_FULL_DB = 18.0
 
 MIN_BASS_PENALTY_THRESHOLD_DB = 0.0
 MAX_BASS_PENALTY_THRESHOLD_DB = 30.0
@@ -1626,7 +1626,7 @@ def measure_bass_strength_db(
     start_sec: float,
     end_sec: float,
 ) -> float:
-    """Return 45-115 Hz strength relative to the low-mid reference band."""
+    """Return 45-65 Hz strength relative to the 100-1000 Hz reference band."""
     return measure_relative_band_strength_db(
         audio=audio,
         sample_rate=sample_rate,
@@ -1897,7 +1897,7 @@ def apply_whole_track_limiter_budget(
 
     if over_budget <= 0.01:
         if estimated_control > 0.01:
-            notes.append(f"limiter will handle {estimated_control:.2f} dB true-peak overage")
+            notes.append(f"limiter will handle {estimated_control:.2f} dB TP overage")
         return suggested_gain, limiter_adjustment, action, "; ".join(notes)
 
     suggested_gain -= over_budget

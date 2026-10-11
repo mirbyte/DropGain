@@ -149,7 +149,7 @@ SETTING_CHANGE_DEBOUNCE_MS = 200
 SAVE_SETTINGS_DEBOUNCE_MS = 500
 RESULTS_TABLE_RESIZE_DEBOUNCE_MS = 50
 SETTINGS_FILE_NAME = "dropgain_settings.json"
-SETTINGS_SCHEMA_VERSION = 3
+SETTINGS_SCHEMA_VERSION = 2
 
 LOG_FILE_NAME = "dropgain.log"
 CRASH_LOG_FILE_NAME = "dropgain_crash.log"
@@ -452,13 +452,22 @@ class App(WaveformMixin, ctk.CTk):
 
         if "low_end_eq_max" not in upgraded:
             upgraded["low_end_eq_max"] = DEFAULT_LOW_END_EQ_MAX_DB
-        elif previous_schema < 3:
-            try:
-                saved_low_end_eq_max = float(upgraded["low_end_eq_max"])
-            except (TypeError, ValueError):
-                saved_low_end_eq_max = DEFAULT_LOW_END_EQ_MAX_DB
-            if abs(saved_low_end_eq_max - 1.5) < 0.001:
-                upgraded["low_end_eq_max"] = DEFAULT_LOW_END_EQ_MAX_DB
+        if previous_schema < 2:
+            old_thresholds = {
+                "bass_penalty_start": (5.0, DEFAULT_BASS_PENALTY_START_DB),
+                "bass_penalty_full": (17.0, DEFAULT_BASS_PENALTY_FULL_DB),
+                "sub_penalty_start": (8.0, DEFAULT_SUB_PENALTY_START_DB),
+                "sub_penalty_full": (17.0, DEFAULT_SUB_PENALTY_FULL_DB),
+            }
+            for key, (old_value, new_value) in old_thresholds.items():
+                if key not in upgraded:
+                    continue
+                try:
+                    saved_threshold = float(upgraded[key])
+                except (TypeError, ValueError):
+                    continue
+                if abs(saved_threshold - old_value) < 0.001:
+                    upgraded[key] = new_value
         if "low_end_eq_shelf_hz" not in upgraded:
             upgraded["low_end_eq_shelf_hz"] = DEFAULT_LOW_END_EQ_SHELF_HZ
         else:
