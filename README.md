@@ -51,26 +51,28 @@ On a Ryzen 7 with Analysis workers set to 4, full analyze + render runs have ave
 
 ## When DropGain makes sense (and when it doesn't)
 
-Narrower than most commercial library tools on purpose: level and peak control, not repair, color, or all-in-one templates.
+Other tools win when you want the library leveled without reviewing the decision. DJ auto gain is already in the app you play from. Platinum Notes is a template and a run. DropGain is the higher-friction option: a target band, a true-peak ceiling, usually a limiter plugin, a results table, and `_DG` files you play with that app's auto gain turned off.
+
+That review step is the product. The level decision stays visible, and the signal path stays linear gain unless a peak needs a limiter.
 
 **Consider DropGain if you:**
 
-- Want **section-based** loudness (drop/chorus), not whole-file average or playback-time trim
-- Want a defined **true-peak ceiling** (default -1.0 dBTP) with gain reduced when level and peak conflict
+- Want **section-based** loudness (drop/chorus), not a whole-file average or a playback-time trim
+- Want a defined **true-peak ceiling** (default -1.0 dBTP), with gain reduced when level and peak conflict
 - Want **auditable** per-track numbers (LUFS, dBTP, section boundaries, limiter estimate) before batch render
 - Want **portable** output that does not depend on one app's auto-gain database
 - Prefer a **minimal signal path**: linear gain when possible; limiting only when peak control is required
-- Value **inspectability**: open source code, tweakable defaults, no black-box batch chain
-- Are fine with a **work-in-progress** tool (see Status) and validating results on a library copy first
+- Value **inspectability**: open source, tweakable defaults, no black-box batch chain
 
 **Probably not for you if you:**
 
-- Want one integrated app for library management, analysis, and decks with minimal setup
-- Want clipped-peak repair, warmth, saturation, or template-style enhancement without tuning
-- Need polished vendor support and broad cross-platform QA
-- Do not want any setup at all, including (for full peak-limited prep) a limiter plugin (FabFilter Pro-L 2 or the free LoudMax). A packaged Windows build ships FFmpeg; limiter-assisted mode still needs a VST3.
+- Want the library leveled without choosing a target, reading a table, or changing a DJ-software setting
+- Want clipped-peak repair, warmth, saturation, or a template, with limiting included and nothing else to install
+- Need vendor support and a fully tested app on macOS and Linux (see **Status**)
 
-Commercial DJ and prep tools are often the better fit for convenience, integration, and breadth. DropGain is an alternative when your workflow cares more about explicit targets, render-stage control, and a transparent path than about all-in-one polish.
+A packaged Windows build includes FFmpeg. Limiter-assisted prep still needs a VST3: FabFilter Pro-L 2, or the free LoudMax. Analysis and clean-gain render do not.
+
+Commercial tools are the better fit when you want that convenience. DropGain is the alternative when you would rather see the gain decision and keep enhancement out of the path.
 
 ## Compared to other tools
 
