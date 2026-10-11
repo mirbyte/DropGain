@@ -1997,9 +1997,9 @@ def decide_from_measurements(
                 "source MP3 will be decoded to AIFF",
             )
         elif output_ext == ".aiff":
-            decision_notes = append_note(decision_notes, "AIFF output")
+            decision_notes = append_note(decision_notes, "AIFF out")
         elif output_ext == ".mp3":
-            decision_notes = append_note(decision_notes, "MP3 output")
+            decision_notes = append_note(decision_notes, "MP3 out")
 
     raw_gain, suggested_gain, action, gain_notes = calculate_gain_suggestion(
         loudest_lufs=loudest_lufs,
