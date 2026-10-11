@@ -79,6 +79,8 @@ SETTINGS_HINT = TYPE_LABEL
 class CTkNumberInput(ctk.CTkFrame):
     """Small CustomTkinter numeric input with minus/plus controls."""
 
+    _INCOMPLETE = {"", "-", ".", "-.", "+", "+."}
+
     def __init__(
         self,
         master: Any,
@@ -100,6 +102,11 @@ class CTkNumberInput(ctk.CTkFrame):
         self._increment = float(increment)
         self._integer = integer
         self._app = app
+        self._syncing = False
+        # CTkEntry calls textvariable.get() on every edit. DoubleVar/IntVar raise TclError while the box is empty, so the entry holds a StringVar.
+        self._text = tk.StringVar(master=self, value=self._format_value(self._read_variable()))
+        self._text_trace: str | None = None
+        self._var_trace: str | None = None
 
         self.btn_minus = ctk.CTkButton(
             self,
@@ -118,7 +125,7 @@ class CTkNumberInput(ctk.CTkFrame):
 
         self.entry = ctk.CTkEntry(
             self,
-            textvariable=variable,
+            textvariable=self._text,
             width=width,
             height=30,
             fg_color=BG_FIELD,
@@ -127,6 +134,12 @@ class CTkNumberInput(ctk.CTkFrame):
             font=entry_font or ("Segoe UI", 12),
         )
         self.entry.pack(side="left", padx=4)
+        self.entry.bind("<Button-1>", self._on_click)
+        self.entry.bind("<FocusIn>", self._on_focus_in)
+        self.entry.bind("<FocusOut>", self._commit_text)
+        self.entry.bind("<Return>", self._commit_text)
+        self._text_trace = self._text.trace_add("write", self._on_text_changed)
+        self._var_trace = self._variable.trace_add("write", self._on_variable_changed)
 
         self.btn_plus = ctk.CTkButton(
             self,
@@ -170,17 +183,112 @@ class CTkNumberInput(ctk.CTkFrame):
         self.btn_plus.configure(state=state, cursor=cursor)
         self.entry.configure(state=state)
 
-    def _step(self, delta: float) -> None:
-        try:
-            current = float(self._variable.get())
-        except Exception:
-            current = self._from
+    def destroy(self) -> None:
+        if self._text_trace is not None:
+            self._text.trace_remove("write", self._text_trace)
+            self._text_trace = None
+        if self._var_trace is not None:
+            self._variable.trace_remove("write", self._var_trace)
+            self._var_trace = None
+        super().destroy()
 
-        value = min(self._to, max(self._from, current + delta))
+    def _read_variable(self) -> float:
+        try:
+            return float(self._variable.get())
+        except (tk.TclError, ValueError, TypeError):
+            return self._from
+
+    def _format_value(self, value: float) -> str:
         if self._integer:
-            self._variable.set(int(round(value)))
-        else:
-            self._variable.set(round(value, 3))
+            return str(int(round(value)))
+        return str(round(float(value), 3))
+
+    def _parse(self, raw: str, *, strict_integer: bool = True) -> float | None:
+        text = raw.strip()
+        if text in self._INCOMPLETE:
+            return None
+        if self._integer and strict_integer:
+            body = text[1:] if text[0] in "+-" else text
+            if not body.isdigit():
+                return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _same(left: float, right: float) -> bool:
+        return abs(float(left) - float(right)) < 1e-9
+
+    def _on_text_changed(self, *_args: object) -> None:
+        if self._syncing:
+            return
+        parsed = self._parse(self._text.get())
+        if parsed is None or self._same(parsed, self._read_variable()):
+            return
+        stored = int(round(parsed)) if self._integer else parsed
+        self._syncing = True
+        try:
+            self._variable.set(stored)
+        finally:
+            self._syncing = False
+
+    def _on_variable_changed(self, *_args: object) -> None:
+        if self._syncing:
+            return
+        try:
+            value = float(self._variable.get())
+        except (tk.TclError, ValueError, TypeError):
+            return
+        parsed = self._parse(self._text.get())
+        if parsed is not None and self._same(parsed, value):
+            return
+        formatted = self._format_value(value)
+        if self._text.get() == formatted:
+            return
+        self._syncing = True
+        try:
+            self._text.set(formatted)
+        finally:
+            self._syncing = False
+
+    def _on_click(self, _event: object = None) -> str:
+        self.entry.focus_set()
+        self.entry.after_idle(self._select_all)
+        return "break"
+
+    def _on_focus_in(self, _event: object = None) -> None:
+        self.entry.after_idle(self._select_all)
+
+    def _select_all(self) -> None:
+        try:
+            self.entry.select_range(0, "end")
+            self.entry.icursor("end")
+        except tk.TclError:
+            return
+
+    def _commit_value(self, value: float, *, clamp: bool) -> None:
+        if clamp:
+            value = min(self._to, max(self._from, value))
+        stored = int(round(value)) if self._integer else round(float(value), 3)
+        formatted = self._format_value(stored)
+        self._syncing = True
+        try:
+            if not self._same(stored, self._read_variable()):
+                self._variable.set(stored)
+            if self._text.get() != formatted:
+                self._text.set(formatted)
+        finally:
+            self._syncing = False
+
+    def _commit_text(self, _event: object = None) -> None:
+        parsed = self._parse(self._text.get(), strict_integer=False)
+        self._commit_value(self._read_variable() if parsed is None else parsed, clamp=False)
+
+    def _step(self, delta: float) -> None:
+        parsed = self._parse(self._text.get(), strict_integer=False)
+        current = self._read_variable() if parsed is None else parsed
+        self._commit_value(current + delta, clamp=True)
 
 
 class PreferencesPage(ctk.CTkFrame):
@@ -299,6 +407,10 @@ class PreferencesPage(ctk.CTkFrame):
     def refresh_from_app(self) -> None:
         self.app._refresh_output_format_hint()
         self.app._refresh_settings_summary()
+
+    def commit_number_inputs(self) -> None:
+        for number_input in self._number_inputs:
+            number_input._commit_text()
 
     def refresh_layout(self) -> None:
         self._schedule_preferences_layout()

@@ -267,6 +267,7 @@ class App(WaveformMixin, ctk.CTk):
         self.after(100, self._poll_queue)
         self.protocol("WM_DELETE_WINDOW", self._close_app)
         self.bind("<Configure>", self._on_root_configure_for_dpi, add="+")
+        self.bind_all("<Button-1>", self._release_text_focus, add="+")
 
         self.update_idletasks()
         actual_scale = self._ui_scale()
@@ -290,6 +291,20 @@ class App(WaveformMixin, ctk.CTk):
     # ---------------------------------------------------------------------
     # Settings and setup
     # ---------------------------------------------------------------------
+
+    def _release_text_focus(self, event: tk.Event) -> None:
+        widget = event.widget
+        try:
+            if widget.winfo_toplevel() is not self:
+                return
+        except tk.TclError:
+            return
+        if isinstance(widget, (tk.Entry, tk.Text, tk.Spinbox, tk.Listbox, ttk.Treeview, ttk.Entry)):
+            return
+        try:
+            self.focus_set()
+        except tk.TclError:
+            return
 
     def _maximize_window(self) -> None:
         try:
@@ -1702,6 +1717,8 @@ class App(WaveformMixin, ctk.CTk):
     def _prepare_main_page_for_reveal(self, name: str, prev_page: str) -> None:
         """Run page refresh/layout work while the curtain is still up."""
         if prev_page == "preferences" and name != "preferences":
+            if self.preferences_page is not None:
+                self.preferences_page.commit_number_inputs()
             self._flush_main_page_visuals()
 
         if name == "process":
