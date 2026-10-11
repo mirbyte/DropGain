@@ -283,6 +283,7 @@ class PreferencesPage(ctk.CTkFrame):
             corner_radius=BUTTON_CORNER_RADIUS,
         )
         self.btn_system_check.pack(side="left", padx=(8, 0))
+        self._build_supporter_box(footer, footer_button_height)
 
         app.lbl_output_format_hint = self.lbl_output_format_hint
         app.mode_menu = self.mode_menu
@@ -461,6 +462,106 @@ class PreferencesPage(ctk.CTkFrame):
         inner.pack(fill="both", expand=True, padx=14, pady=14)
         inner.grid_columnconfigure(0, weight=1)
         return inner
+
+    def _build_supporter_box(self, footer: Any, height: int) -> None:
+        box = ctk.CTkFrame(footer, fg_color="transparent")
+        box.pack(side="right")
+        self._supporter_box = box
+
+        self.supporter_code_var = tk.StringVar()
+        self.supporter_entry = self.app._entry(
+            box,
+            textvariable=self.supporter_code_var,
+            width=200,
+            height=height,
+            size=SETTINGS_HINT,
+        )
+        self.supporter_entry.configure(
+            placeholder_text="Supporter code",
+            placeholder_text_color=FG_MUTED,
+        )
+        self.btn_supporter_register = self.app._button(
+            box,
+            text="Register",
+            command=self._on_register_supporter,
+        )
+        self.btn_supporter_register.configure(height=height, width=88)
+        self.btn_supporter_remove = self.app._button(
+            box,
+            text="Remove",
+            command=self._on_remove_supporter,
+        )
+        self.btn_supporter_remove.configure(height=height, width=80)
+        self.lbl_supporter_status = self.app._label(
+            box,
+            text="",
+            color=FG_MUTED,
+            bg=BG_MAIN,
+            size=SETTINGS_HINT,
+            anchor="e",
+        )
+        self._refresh_supporter_status()
+
+    def _show_supporter_message(self, text: str, color: str) -> None:
+        self.lbl_supporter_status.configure(
+            text=text,
+            text_color=color,
+            font=self.app._font(SETTINGS_HINT),
+        )
+        self._layout_supporter_box("message")
+
+    def _layout_supporter_box(self, mode: str) -> None:
+        self.supporter_entry.pack_forget()
+        self.btn_supporter_register.pack_forget()
+        self.btn_supporter_remove.pack_forget()
+        self.lbl_supporter_status.pack_forget()
+        if mode == "registered":
+            self.btn_supporter_remove.pack(side="right")
+            self.lbl_supporter_status.pack(side="right", padx=(0, 8))
+            return
+        self.btn_supporter_register.pack(side="right")
+        self.supporter_entry.pack(side="right", padx=(0, 8))
+        if mode == "message":
+            self.lbl_supporter_status.pack(side="right", padx=(0, 8))
+
+    def _refresh_supporter_status(self) -> None:
+        supporter = self.app._supporter
+        if supporter is None:
+            self.lbl_supporter_status.configure(text="", text_color=FG_MUTED)
+            self._layout_supporter_box("editor")
+            return
+        self.lbl_supporter_status.configure(
+            text="registered",
+            text_color=SUCCESS_FG,
+            font=self.app._font(SETTINGS_HINT),
+        )
+        self._layout_supporter_box("registered")
+
+    def _on_register_supporter(self) -> None:
+        try:
+            self.app._register_supporter_code(self.supporter_code_var.get())
+        except ValueError as exc:
+            self._show_supporter_message(str(exc), ERROR_FG)
+            self.app._logger.info("Supporter code rejected")
+            return
+        except OSError:
+            self._show_supporter_message("Could not save the supporter code.", ERROR_FG)
+            self.app._logger.exception("Failed to save supporter code")
+            return
+        self.supporter_code_var.set("")
+        self._refresh_supporter_status()
+        self.app._logger.info("Supporter code accepted")
+
+    def _on_remove_supporter(self) -> None:
+        try:
+            self.app._clear_supporter_registration()
+        except OSError:
+            self._show_supporter_message("Could not remove the supporter code.", ERROR_FG)
+            self.app._logger.exception("Failed to remove supporter code")
+            return
+        self.supporter_code_var.set("")
+        self._refresh_supporter_status()
+        self.app._logger.info("Supporter code removed")
 
     def _subheading(self, parent: Any, row: int, text: str, *, columnspan: int = 1) -> None:
         self.app._label(

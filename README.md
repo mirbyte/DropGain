@@ -236,7 +236,7 @@ Packaged build (`release/DropGain/` from `python build.py`):
 From source:
 
 - **FFmpeg / ffprobe** on `PATH`, or in a `bin/` folder next to the app (same layout as the packaged build)
-- Python deps: `pip install -r requirements.txt` (`customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`)
+- Python deps: `pip install -r requirements.txt` (`customtkinter`, `numpy`, `scipy`, `pyloudnorm`, `mutagen`, `pedalboard`, `Pillow`, `cryptography`)
 - Limiter VST3 as above (`PROL2_PLUGIN_PATH` / `LOUDMAX_PLUGIN_PATH` or auto-discovery)
 - Launch `main.pyw`. **Preferences → Check Limiter / System** validates the toolchain before batch render.
 
@@ -265,6 +265,7 @@ No packaged build. From source only:
 | `gui_waveform.py` | Waveform preview worker, decode, PIL canvas rendering |
 | `gui_theme.py` | Shared colors, typography, layout constants, table column defs |
 | `gui_utils.py` | DPI awareness, tooltips, queue log handler, window sizing |
+| `supporter.py` | Supporter-code verification |
 | `analysis.py` | Measurement, gain logic, discovery, CSV schema |
 | `processing.py` | Render paths, limiter (Pro-L 2 / LoudMax) host, metadata |
 | `jobs.py` | Analyze / render / batch jobs, worker pools |

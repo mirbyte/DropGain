@@ -109,6 +109,7 @@ from processing import (
     verify_prol2_plugin,
 )
 from gui_waveform import WaveformMixin
+from supporter import Supporter, normalize_supporter_token, verify_supporter_code
 from gui_process import RESULTS_EMPTY_PLACEHOLDER
 from gui_theme import *  # noqa: F403
 from gui_utils import (  # noqa: F401
@@ -253,7 +254,9 @@ class App(WaveformMixin, ctk.CTk):
         self._number_inputs: list[Any] = []
 
         self._init_settings_variables()
+        self._load_supporter_state()
         self._configure_logging()
+        self._discard_legacy_supporter_file()
         self._install_exception_handlers()
         self._configure_treeview_style()
         self._build_ui()
@@ -503,10 +506,76 @@ class App(WaveformMixin, ctk.CTk):
             SAVE_SETTINGS_DEBOUNCE_MS,
         )
 
-    def _save_settings(self) -> None:
+    def _load_supporter_state(self) -> None:
+        self._supporter = None
+        self._supporter_token = ""
+        self._legacy_supporter_file = (script_folder() / "dropgain_supporter.json").is_file()
+        token = self._settings.get("supporter_code")
+        if not isinstance(token, str) or not token.strip():
+            token = self._read_legacy_supporter_token()
+        if not isinstance(token, str) or not token.strip():
+            return
+        try:
+            normalized = normalize_supporter_token(token)
+            self._supporter = verify_supporter_code(normalized)
+            self._supporter_token = normalized
+        except ValueError:
+            self._supporter = None
+            self._supporter_token = ""
+
+    def _read_legacy_supporter_token(self) -> str:
+        path = script_folder() / "dropgain_supporter.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return ""
+        if not isinstance(data, dict):
+            return ""
+        token = data.get("token")
+        return token if isinstance(token, str) else ""
+
+    def _discard_legacy_supporter_file(self) -> None:
+        if not self._legacy_supporter_file:
+            return
+        path = script_folder() / "dropgain_supporter.json"
+        if self._supporter_token and not isinstance(self._settings.get("supporter_code"), str):
+            if not self._save_settings():
+                return
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            self._logger.exception("Failed to remove dropgain_supporter.json")
+
+    def _register_supporter_code(self, token: str) -> None:
+        normalized = normalize_supporter_token(token)
+        supporter = verify_supporter_code(normalized)
+        previous_token = self._supporter_token
+        previous = self._supporter
+        self._supporter_token = normalized
+        self._supporter = supporter
+        if not self._save_settings():
+            self._supporter_token = previous_token
+            self._supporter = previous
+            raise OSError("Could not save settings.")
+        self._apply_supporter_chrome()
+
+    def _clear_supporter_registration(self) -> None:
+        previous_token = self._supporter_token
+        previous = self._supporter
+        self._supporter_token = ""
+        self._supporter = None
+        if not self._save_settings():
+            self._supporter_token = previous_token
+            self._supporter = previous
+            raise OSError("Could not save settings.")
+        self._apply_supporter_chrome()
+
+    def _save_settings(self) -> bool:
         self._save_settings_after_id = None
         if not hasattr(self, "var_folder"):
-            return
+            return False
 
         try:
             data = {
@@ -539,14 +608,18 @@ class App(WaveformMixin, ctk.CTk):
                 "include_source_format": bool(self.var_include_source_format.get()),
                 "write_csv": bool(self.var_write_csv.get()),
             }
+            if self._supporter_token:
+                data["supporter_code"] = self._supporter_token
         except Exception:
-            return
+            return False
 
         try:
             with open(self._settings_path(), "w", encoding="utf-8") as handle:
                 json.dump(data, handle, indent=2)
         except Exception:
             self._logger.exception("Failed to save settings")
+            return False
+        return True
 
     def _configure_logging(self) -> None:
         self._logger.setLevel(logging.INFO)
@@ -1451,6 +1524,24 @@ class App(WaveformMixin, ctk.CTk):
     # UI construction
     # ---------------------------------------------------------------------
 
+    def _supporter_header_name(self, name: str) -> str:
+        compact = " ".join(name.split())
+        if len(compact) <= 40:
+            return compact
+        return compact[:39].rstrip() + "…"
+
+    def _apply_supporter_chrome(self) -> None:
+        supporter: Supporter | None = self._supporter
+        if supporter is None:
+            self.lbl_wordmark_gain.configure(text_color=BRAND_WORDMARK_ACCENT_COLOR)
+            self.lbl_supporter_name.pack_forget()
+            self.header_rule.configure(fg_color=BORDER_COLOR, height=1)
+            return
+        self.lbl_wordmark_gain.configure(text_color=WARN_FG)
+        self.lbl_supporter_name.configure(text=self._supporter_header_name(supporter.name))
+        self.lbl_supporter_name.pack(side="left", anchor="s", padx=(16, 0), pady=(0, 7))
+        self.header_rule.configure(fg_color=WARN_FG, height=2)
+
     def _build_ui(self) -> None:
         from gui_process import ProcessPage
 
@@ -1479,14 +1570,23 @@ class App(WaveformMixin, ctk.CTk):
             font=brand_font,
             anchor="w",
         ).pack(side="left")
-        ctk.CTkLabel(
+        self.lbl_wordmark_gain = ctk.CTkLabel(
             wordmark_row,
             text="GAIN",
             fg_color="transparent",
             text_color=BRAND_WORDMARK_ACCENT_COLOR,
             font=brand_font,
             anchor="w",
-        ).pack(side="left")
+        )
+        self.lbl_wordmark_gain.pack(side="left")
+        self.lbl_supporter_name = ctk.CTkLabel(
+            wordmark_row,
+            text="",
+            fg_color="transparent",
+            text_color=FG_MUTED,
+            font=self._ui_accent_font(TYPE_LABEL),
+            anchor="sw",
+        )
 
         nav = ctk.CTkFrame(header_inner, fg_color="transparent")
         nav.grid(row=0, column=1, sticky="nse")
@@ -1538,7 +1638,9 @@ class App(WaveformMixin, ctk.CTk):
         self.btn_report_issue.grid(row=0, column=3, padx=(SPACE_2, 0))
         apply_hand_cursor(self.btn_report_issue)
 
-        ctk.CTkFrame(header, fg_color=BORDER_COLOR, height=1, corner_radius=0).grid(row=1, column=0, sticky="ew")
+        self.header_rule = ctk.CTkFrame(header, fg_color=BORDER_COLOR, height=1, corner_radius=0)
+        self.header_rule.grid(row=1, column=0, sticky="ew")
+        self._apply_supporter_chrome()
 
         self.pages_container = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0)
         self.pages_container.grid(row=1, column=0, sticky="nsew")

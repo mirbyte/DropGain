@@ -98,7 +98,6 @@ EXCLUDE_MODULES = (
     "grpc",
     "grpcio",
     "google",
-    "cryptography",
     "bcrypt",
     "nacl",
     "paramiko",
@@ -180,6 +179,19 @@ def ffmpeg_tool_path(name: str) -> Path | None:
     return None
 
 
+def require_cryptography() -> None:
+    """Supporter-code checks import cryptography. A build without it still launches."""
+    import importlib.util
+
+    if importlib.util.find_spec("cryptography") is not None:
+        return
+    raise SystemExit(
+        "Missing cryptography in the build environment.\n"
+        "  .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt\n"
+        "Then run build.bat or: python build.py"
+    )
+
+
 def require_ffmpeg() -> None:
     missing = [name for name in ("ffmpeg.exe", "ffprobe.exe") if ffmpeg_tool_path(name) is None]
     if missing:
@@ -213,6 +225,8 @@ def run_pyinstaller() -> None:
         f"assets{os.pathsep}assets",
         "--collect-all",
         "customtkinter",
+        "--collect-all",
+        "cryptography",
         "--collect-binaries",
         "pedalboard",
         "--collect-data",
@@ -316,6 +330,7 @@ def main() -> None:
     args = parser.parse_args()
 
     require_ffmpeg()
+    require_cryptography()
     if not args.skip_pyinstaller:
         warn_if_polluted_env()
         run_pyinstaller()
