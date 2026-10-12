@@ -44,7 +44,7 @@ On a Ryzen 7 with Analysis workers set to 4, full analyze + render runs have ave
 - **Library analysis** - recursive scan; programme and section LUFS, dBTP, sample peak, suggested gain, projections, and processing action per row
 - **Section-based targeting** - loudest sliding window (default 20 s / 5 s hop); true-peak ceiling wins over LUFS when they conflict
 - **Clean gain or limiter-assisted** - linear gain when the ceiling allows; a limiter engine (FabFilter Pro-L 2 or LoudMax) with `max_reduction` cap when peak control is needed
-- **Bass-aware trim** - on bass-heavy sections, low-band energy can reduce a boost or deepen a cut slightly
+- **Bass treatment** - Level trim or a low-shelf cut from 30–100 Hz energy in the loudest LUFS window. That window is a loudness pick: LUFS discounts low end, so a heavier section elsewhere is ignored. The trim or shelf still applies to the whole file.
 - **`_DG` outputs** - copies beside sources or under a separate root; preserve format, force AIFF/MP3, or decode MP3 to AIFF to avoid double lossy encode
 - **Library Tuning** - profile the library and suggest a loudness target
 - **Verification** - post-render re-measurement; loudness-normalization tags stripped; optional CSV (`dropgain_report.csv`) and session log
@@ -131,6 +131,8 @@ Hanning window; frame size `N = max(2048, min(32768, 2^floor(log2 n)))` for sect
 At 48 kHz with `N = 32768`, bin spacing is ~1.46 Hz (~48 bins in the bass band). Noisier when `N` shrinks on short sections.
 
 Band strength affects bass-aware gain trim and Low-end EQ only, not section selection. Reported per track as `bass_strength_db` (results table and CSV).
+
+The window is whichever block scores highest in LUFS, so this is not a search for the bassiest part of the file.
 
 ### Gain decision
 

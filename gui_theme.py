@@ -254,7 +254,9 @@ RESULTS_TABLE_COLUMNS = (
         "Bass",
         "e",
         "+12.34 dB",
-        "30-100 Hz energy relative to the 400-8000 Hz reference band. Higher values can trigger the bass treatment.",
+        "30-100 Hz versus 400-8000 Hz, measured only on the loudest LUFS section. "
+        "LUFS discounts bass, so a heavier low end elsewhere in the track is not checked. "
+        "Higher values can trigger the bass treatment.",
     ),
     (
         "status",

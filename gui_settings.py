@@ -1090,6 +1090,9 @@ class PreferencesPage(ctk.CTkFrame):
                 "Level trim pulls broadband gain back on bass-heavy tracks. "
                 "Low-end EQ applies a low shelf at the Low-end EQ corner instead, then measures loudness and true peak again. "
                 "Only one of those can be active.\n"
+                "The amount comes from bass in the loudest LUFS section only. "
+                "LUFS discounts low end, so a bassier part outside that window does not raise the cut or trim. "
+                "The result is still applied to the whole file.\n"
                 "Low-end EQ changes the analyzed audio, so that mode, its max cut, its corner, and the thresholds "
                 "below need a new analysis when they change."
             ),
