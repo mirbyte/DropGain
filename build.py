@@ -12,12 +12,11 @@ Run:
 
 Output:
   release/DropGain/          runnable folder
-  release/DropGain-win64.zip optional archive (--zip)
+  release/DropGain-win64.zip archive of that folder
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 import shutil
 import subprocess
@@ -289,9 +288,13 @@ def assemble_release() -> None:
     plugins.mkdir(exist_ok=True)
     shutil.copy2(ROOT / "plugins" / "README.txt", plugins / "README.txt")
 
+    shutil.copy2(ROOT / "LICENSE", RELEASE / "LICENSE")
+    readme = ROOT / "README.md"
+    if readme.is_file():
+        shutil.copy2(readme, RELEASE / "README.md")
+
     licenses = RELEASE / "licenses"
     licenses.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "LICENSE", licenses / "LICENSE")
     _copy_license_files(THIRD_PARTY_FFMPEG, licenses / "ffmpeg")
     fonts_licenses = licenses / "fonts"
     fonts_licenses.mkdir(parents=True, exist_ok=True)
@@ -316,28 +319,13 @@ def zip_release() -> None:
 
 def main() -> None:
     ensure_venv_python()
-    parser = argparse.ArgumentParser(description="Build DropGain Windows onedir release.")
-    parser.add_argument(
-        "--zip",
-        action="store_true",
-        help=f"Also write {RELEASE_ZIP.name}",
-    )
-    parser.add_argument(
-        "--skip-pyinstaller",
-        action="store_true",
-        help="Only assemble release/ from an existing dist/DropGain",
-    )
-    args = parser.parse_args()
-
     require_ffmpeg()
     require_cryptography()
-    if not args.skip_pyinstaller:
-        warn_if_polluted_env()
-        run_pyinstaller()
+    warn_if_polluted_env()
+    run_pyinstaller()
     assemble_release()
-    if args.zip:
-        zip_release()
-        print(f"Zip: {RELEASE_ZIP}")
+    zip_release()
+    print(f"Zip: {RELEASE_ZIP}")
     print(f"Ready: {RELEASE}")
 
 

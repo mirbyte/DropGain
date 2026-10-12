@@ -245,7 +245,7 @@ From source:
 - Limiter VST3 as above (`PROL2_PLUGIN_PATH` / `LOUDMAX_PLUGIN_PATH` or auto-discovery)
 - Launch `main.pyw`. **Preferences → Check Limiter / System** validates the toolchain before batch render.
 
-Building a release: put an LGPL FFmpeg essentials tree in `third_party/ffmpeg/` (see `third_party/ffmpeg/README.DropGain.txt`), then `pip install -r requirements-build.txt` and `python build.py` (optional `--zip`). Output is `release/DropGain/` with `bin/`, `plugins/`, and `licenses/`.
+Building a release: put an LGPL FFmpeg essentials tree in `third_party/ffmpeg/` (see `third_party/ffmpeg/README.DropGain.txt`), then `pip install -r requirements-build.txt` and double-click `build.bat` (or run `python build.py`). Output is `release/DropGain/` (`LICENSE` and `README.md` at the root, plus `bin/`, `plugins/`, and third-party `licenses/`) and `release/DropGain-win64.zip`.
 
 **macOS / Linux (not tested)**
 

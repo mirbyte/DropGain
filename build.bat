@@ -11,7 +11,7 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 
-".venv\Scripts\python.exe" "%~dp0build.py" %*
+".venv\Scripts\python.exe" "%~dp0build.py"
 set EXITCODE=%ERRORLEVEL%
 
 echo.
