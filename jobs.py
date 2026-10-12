@@ -29,8 +29,6 @@ from analysis import (
     DEFAULT_LOW_END_EQ_SHELF_HZ,
     DEFAULT_LIMITER_ENGINE,
     DEFAULT_OUTPUT_FORMAT_MODE,
-    DEFAULT_SUB_PENALTY_FULL_DB,
-    DEFAULT_SUB_PENALTY_START_DB,
     PROCESSED_SUFFIX,
     TrackRow,
     apply_track_decision,
@@ -150,8 +148,6 @@ class DropGainSettings:
     output_root: str | None = None
     bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB
-    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB
-    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB
     bass_treatment: str = DEFAULT_BASS_TREATMENT
     low_end_eq_max_db: float = DEFAULT_LOW_END_EQ_MAX_DB
     low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ
@@ -289,8 +285,6 @@ def recompute_row_decision(
         bass_max_reduction_db=settings.bass_max_reduction_db,
         bass_penalty_start_db=settings.bass_penalty_start_db,
         bass_penalty_full_db=settings.bass_penalty_full_db,
-        sub_penalty_start_db=settings.sub_penalty_start_db,
-        sub_penalty_full_db=settings.sub_penalty_full_db,
         bass_treatment=settings.bass_treatment,
         allow_risky_true_peak_boost=settings.allow_risky_true_peak_boost,
     )
@@ -485,8 +479,6 @@ def run_analysis_job(
                 bass_max_reduction=settings.bass_max_reduction_db,
                 bass_penalty_start_db=settings.bass_penalty_start_db,
                 bass_penalty_full_db=settings.bass_penalty_full_db,
-                sub_penalty_start_db=settings.sub_penalty_start_db,
-                sub_penalty_full_db=settings.sub_penalty_full_db,
                 bass_treatment=settings.bass_treatment,
                 low_end_eq_max_db=settings.low_end_eq_max_db,
                 low_end_eq_shelf_hz=settings.low_end_eq_shelf_hz,

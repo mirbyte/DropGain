@@ -1100,7 +1100,7 @@ class PreferencesPage(ctk.CTkFrame):
             grid, 1, 0, "Max bass-aware trim", self.app.var_bass_max_reduction,
             MIN_BASS_MAX_BOOST_REDUCTION_DB, MAX_BASS_MAX_BOOST_REDUCTION_DB, 0.1, "dB",
             tooltip=(
-                "Broadband pullback when bass or sub strength reaches Full. "
+                "Broadband pullback when bass strength reaches Full. "
                 "Between Start and Full the pullback is a fraction of this value: halfway gets half. "
                 "Below Start it is 0.\n"
                 "It can reduce a boost, deepen a cut, or pull down an in-target track."
@@ -1111,7 +1111,7 @@ class PreferencesPage(ctk.CTkFrame):
             grid, 1, 0, "Max low-end EQ", self.app.var_low_end_eq_max,
             MIN_LOW_END_EQ_MAX_DB, MAX_LOW_END_EQ_MAX_DB, 0.1, "dB",
             tooltip=(
-                "Shelf cut when bass or sub strength reaches Full. "
+                "Shelf cut when bass strength reaches Full. "
                 "Between Start and Full the cut is a fraction of this value: halfway gets half. "
                 "Below Start the cut is 0.\n"
                 "The corner sets where that cut sits in frequency. "
@@ -1126,7 +1126,7 @@ class PreferencesPage(ctk.CTkFrame):
             integer=True,
             tooltip=(
                 "Halfway point of the low shelf. "
-                "At 70 Hz, a 6 dB cut is about 5 dB at a 50 Hz sub, 3 dB at 70 Hz, and about 1 dB at 100 Hz.\n"
+                "At 100 Hz, a 6 dB cut is about 5.6 dB at 50 Hz, 3 dB at 100 Hz, and about 1 dB at 150 Hz.\n"
                 "Changing this requires a new analysis."
             ),
         )
@@ -1143,11 +1143,10 @@ class PreferencesPage(ctk.CTkFrame):
         self.app._add_tooltip(
             lbl_bass_trim_thresholds,
             (
-                "These four numbers are bass_strength_db and sub_strength_db in the results table: "
-                "how many dB louder that band is than 100-1000 Hz.\n"
+                "These two numbers are bass_strength_db in the results table: "
+                "how many dB more energy sits in 30-100 Hz than in 400-8000 Hz.\n"
                 "Start is no cut. Full is the whole Max for the selected mode. "
-                "Between them the amount grows, so halfway gets half the Max. "
-                "Bass and sub are checked separately; whichever asks for more wins."
+                "Between them the amount grows, so halfway gets half the Max."
             ),
             wraplength=420,
         )
@@ -1157,8 +1156,8 @@ class PreferencesPage(ctk.CTkFrame):
             MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
             remember=self._bass_trim_inputs,
             tooltip=(
-                "bass_strength_db (45-65 Hz versus 100-1000 Hz) where the response starts. "
-                "At the default +17 dB, a track at +16 dB gets nothing, and +18 dB gets a quarter of the Max.\n"
+                "bass_strength_db (30-100 Hz versus 400-8000 Hz) where the response starts. "
+                "At the default +7.5 dB, a track at +7 dB gets nothing, and +9 dB gets about a quarter of the Max.\n"
                 "Raise this if normal EDM bass keeps getting trimmed."
             ),
         )
@@ -1169,28 +1168,8 @@ class PreferencesPage(ctk.CTkFrame):
             remember=self._bass_trim_inputs,
             tooltip=(
                 "bass_strength_db where the track gets the whole Max. "
-                "Between Start and Full the amount grows: at the defaults, +19 dB is halfway from +17 to +21 and gets half the Max.\n"
+                "Between Start and Full the amount grows: at the defaults, +10.75 dB is halfway from +7.5 to +14 and gets half the Max.\n"
                 "Lower Full if those tracks should get the full amount."
-            ),
-        )
-        self._labeled_number(
-            grid, 4, 0, "Sub trim start", self.app.var_sub_penalty_start,
-            MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
-            remember=self._bass_trim_inputs,
-            tooltip=(
-                "Same as Bass trim start, for sub_strength_db (20-45 Hz versus 100-1000 Hz). "
-                "Sub usually reads lower than the 45-65 Hz band, so this defaults to +14 dB, under the bass start.\n"
-                "A sub reading below that adds nothing."
-            ),
-        )
-        self._labeled_number(
-            grid, 4, 1, "Sub trim full", self.app.var_sub_penalty_full,
-            MIN_BASS_PENALTY_THRESHOLD_DB, MAX_BASS_PENALTY_THRESHOLD_DB, 0.5, "dB",
-            padx=(0, 0),
-            remember=self._bass_trim_inputs,
-            tooltip=(
-                "sub_strength_db where the track gets the whole Max. "
-                "Bass and sub are checked separately; whichever asks for more wins."
             ),
         )
         self._sync_bass_treatment_controls()

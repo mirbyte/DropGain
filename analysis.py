@@ -136,11 +136,11 @@ DEFAULT_BASS_TREATMENT = BASS_TREATMENT_LOW_END_EQ
 
 # Minimum-phase RBJ low shelf. S=1 is the steepest monotonic shelf (second order).
 # The corner is the halfway point of the shelf, not the frequency of the full cut.
-DEFAULT_LOW_END_EQ_SHELF_HZ = 70.0
+DEFAULT_LOW_END_EQ_SHELF_HZ = 100.0
 MIN_LOW_END_EQ_SHELF_HZ = 20.0
 MAX_LOW_END_EQ_SHELF_HZ = 200.0
 LOW_END_EQ_SHELF_SLOPE = 1.0
-DEFAULT_LOW_END_EQ_MAX_DB = 4.0
+DEFAULT_LOW_END_EQ_MAX_DB = 2.0
 MIN_LOW_END_EQ_MAX_DB = 0.0
 MAX_LOW_END_EQ_MAX_DB = 10.0
 
@@ -235,18 +235,13 @@ POST_VERIFY_PROCESSED_AUDIO = True
 POST_VERIFY_LUFS_TOLERANCE = 0.40
 POST_VERIFY_PEAK_TOLERANCE_DB = 0.20
 
-BASS_ANALYSIS_LOW_HZ = 45.0
-BASS_ANALYSIS_HIGH_HZ = 65.0
-BASS_REFERENCE_LOW_HZ = 100.0
-BASS_REFERENCE_HIGH_HZ = 1000.0
-DEFAULT_BASS_PENALTY_START_DB = 17.0
-DEFAULT_BASS_PENALTY_FULL_DB = 21.0
-BASS_ANALYSIS_FFT_SIZE = 16_384
-
-SUB_ANALYSIS_LOW_HZ = 20.0
-SUB_ANALYSIS_HIGH_HZ = 45.0
-DEFAULT_SUB_PENALTY_START_DB = 14.0
-DEFAULT_SUB_PENALTY_FULL_DB = 18.0
+BASS_ANALYSIS_LOW_HZ = 30.0
+BASS_ANALYSIS_HIGH_HZ = 100.0
+BASS_REFERENCE_LOW_HZ = 400.0
+BASS_REFERENCE_HIGH_HZ = 8000.0
+DEFAULT_BASS_PENALTY_START_DB = 7.5
+DEFAULT_BASS_PENALTY_FULL_DB = 14.0
+BASS_ANALYSIS_FFT_SIZE = 32_768
 
 MIN_BASS_PENALTY_THRESHOLD_DB = 0.0
 MAX_BASS_PENALTY_THRESHOLD_DB = 30.0
@@ -289,7 +284,6 @@ TrackRowKey: TypeAlias = Literal[
     "target_high_lufs",
     "normalization_mode",
     "bass_strength_db",
-    "sub_strength_db",
     "bass_adjustment_db",
     "low_end_eq_db",
     "limiter_budget_db",
@@ -357,7 +351,6 @@ class TrackRow(TypedDict):
     target_high_lufs: float
     normalization_mode: str
     bass_strength_db: TrackRowNumber
-    sub_strength_db: TrackRowNumber
     bass_adjustment_db: TrackRowNumber
     low_end_eq_db: TrackRowNumber
     limiter_budget_db: TrackRowNumber
@@ -423,7 +416,6 @@ CSV_FIELDNAMES: tuple[TrackRowKey, ...] = (
     "target_high_lufs",
     "normalization_mode",
     "bass_strength_db",
-    "sub_strength_db",
     "bass_adjustment_db",
     "low_end_eq_db",
     "limiter_budget_db",
@@ -1564,7 +1556,11 @@ def measure_relative_band_strength_db(
     reference_low_hz: float = BASS_REFERENCE_LOW_HZ,
     reference_high_hz: float = BASS_REFERENCE_HIGH_HZ,
 ) -> float:
-    """Return one frequency band's spectral strength relative to the reference band."""
+    """Return one frequency band's energy relative to the reference band's energy.
+
+    Energy is summed over bins and averaged over frames, so any note inside
+    the band counts equally and the result tracks total low-end weight.
+    """
     sr = max(1, int(sample_rate))
     start_sample = max(0, int(round(float(start_sec) * sr)))
     end_sample = max(start_sample + 1, int(round(float(end_sec) * sr)))
@@ -1595,23 +1591,21 @@ def measure_relative_band_strength_db(
         raise RuntimeError("band analysis frequency bands are empty")
 
     window = np.hanning(fft_size)
-    band_powers: list[float] = []
-    ref_powers: list[float] = []
+    total_power = np.zeros(freqs.size, dtype=np.float64)
+    frame_count = 0
 
     for start in range(0, mono.size - fft_size + 1, hop_size):
         frame = mono[start:start + fft_size]
         frame = frame - float(np.mean(frame))
-        spectrum = np.fft.rfft(frame * window)
-        power = np.square(np.abs(spectrum))
-        band_powers.append(float(np.mean(power[band_mask])))
-        ref_powers.append(float(np.mean(power[ref_mask])))
+        total_power += np.square(np.abs(np.fft.rfft(frame * window)))
+        frame_count += 1
 
-    if not band_powers or not ref_powers:
+    if frame_count == 0:
         raise RuntimeError("band analysis produced no frames")
 
     eps = 1.0e-20
-    band_power = float(np.median(np.array(band_powers, dtype=np.float64)))
-    ref_power = float(np.median(np.array(ref_powers, dtype=np.float64)))
+    band_power = float(np.sum(total_power[band_mask]))
+    ref_power = float(np.sum(total_power[ref_mask]))
     strength = 10.0 * math.log10((band_power + eps) / (ref_power + eps))
 
     if not math.isfinite(strength):
@@ -1626,7 +1620,7 @@ def measure_bass_strength_db(
     start_sec: float,
     end_sec: float,
 ) -> float:
-    """Return 45-65 Hz strength relative to the 100-1000 Hz reference band."""
+    """Return 30-100 Hz energy relative to the 400-8000 Hz reference band."""
     return measure_relative_band_strength_db(
         audio=audio,
         sample_rate=sample_rate,
@@ -1634,23 +1628,6 @@ def measure_bass_strength_db(
         end_sec=end_sec,
         band_low_hz=BASS_ANALYSIS_LOW_HZ,
         band_high_hz=BASS_ANALYSIS_HIGH_HZ,
-    )
-
-
-def measure_sub_strength_db(
-    audio: np.ndarray,
-    sample_rate: int,
-    start_sec: float,
-    end_sec: float,
-) -> float:
-    """Return 20-45 Hz strength relative to the low-mid reference band."""
-    return measure_relative_band_strength_db(
-        audio=audio,
-        sample_rate=sample_rate,
-        start_sec=start_sec,
-        end_sec=end_sec,
-        band_low_hz=SUB_ANALYSIS_LOW_HZ,
-        band_high_hz=SUB_ANALYSIS_HIGH_HZ,
     )
 
 
@@ -1707,26 +1684,20 @@ def apply_low_shelf(
 
 def low_end_eq_cut_db(
     bass_strength_db: float | None,
-    sub_strength_db: float | None,
     *,
     bass_treatment: str,
     low_end_eq_max_db: float,
     bass_penalty_start_db: float,
     bass_penalty_full_db: float,
-    sub_penalty_start_db: float,
-    sub_penalty_full_db: float,
 ) -> float:
     """Return the low-shelf cut for Low-end EQ, or 0 for any other mode."""
     if normalize_bass_treatment(bass_treatment) != BASS_TREATMENT_LOW_END_EQ:
         return 0.0
     return bass_aware_gain_trim_db(
         bass_strength_db,
-        sub_strength_db,
         bass_max_reduction_db=low_end_eq_max_db,
         bass_penalty_start_db=bass_penalty_start_db,
         bass_penalty_full_db=bass_penalty_full_db,
-        sub_penalty_start_db=sub_penalty_start_db,
-        sub_penalty_full_db=sub_penalty_full_db,
     )
 
 
@@ -1753,14 +1724,11 @@ def remeasure_after_low_end_eq(
 
 def bass_aware_gain_trim_db(
     bass_strength_db: float | None,
-    sub_strength_db: float | None,
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
-    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
-    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
 ) -> float:
-    """Return a mild low-end trim magnitude from measured bass/sub strength.
+    """Return a mild low-end trim magnitude from measured bass strength.
 
     Independent of any suggested gain: a bass-heavy loudest section can feel
     louder than LUFS reports even when the track is already in the target
@@ -1771,19 +1739,12 @@ def bass_aware_gain_trim_db(
     if max_reduction <= 0.01:
         return 0.0
 
-    bass_reduction = boost_reduction_for_strength(
+    return boost_reduction_for_strength(
         bass_strength_db,
         bass_penalty_start_db,
         bass_penalty_full_db,
         max_reduction,
     )
-    sub_reduction = boost_reduction_for_strength(
-        sub_strength_db,
-        sub_penalty_start_db,
-        sub_penalty_full_db,
-        max_reduction,
-    )
-    return max(bass_reduction, sub_reduction)
 
 
 def mark_bass_aware_action(action: str) -> str:
@@ -1960,7 +1921,6 @@ def decide_from_measurements(
     true_peak_dbtp: float,
     section_true_peak_dbtp: float | None,
     bass_strength: float | None,
-    sub_strength: float | None,
     source_ext: str,
     output_ext: str,
     output_format_mode: str,
@@ -1972,8 +1932,6 @@ def decide_from_measurements(
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
-    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
-    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
     bass_treatment: str = DEFAULT_BASS_TREATMENT,
     allow_risky_true_peak_boost: bool = False,
     true_peak_measurements_present: bool = True,
@@ -2016,12 +1974,9 @@ def decide_from_measurements(
     if normalize_bass_treatment(bass_treatment) == BASS_TREATMENT_LEVEL_TRIM:
         bass_adjustment = bass_aware_gain_trim_db(
             bass_strength,
-            sub_strength,
             bass_max_reduction_db=bass_max_reduction_db,
             bass_penalty_start_db=bass_penalty_start_db,
             bass_penalty_full_db=bass_penalty_full_db,
-            sub_penalty_start_db=sub_penalty_start_db,
-            sub_penalty_full_db=sub_penalty_full_db,
         )
     else:
         bass_adjustment = 0.0
@@ -2172,8 +2127,6 @@ def decision_from_row(
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
-    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
-    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
     bass_treatment: str = DEFAULT_BASS_TREATMENT,
     allow_risky_true_peak_boost: bool = False,
 ) -> TrackDecision:
@@ -2183,7 +2136,6 @@ def decision_from_row(
     true_peak = parse_float_or_default(row["true_peak_dbtp"], sample_peak)
     section_tp = parse_optional_float(row.get("section_true_peak_dbtp", ""))
     bass_strength = parse_optional_float(row.get("bass_strength_db", ""))
-    sub_strength = parse_optional_float(row.get("sub_strength_db", ""))
     source_ext = str(row.get("extension", "")).lower()
     output_ext = output_extension_for_source(source_ext, row.get("output_format_mode", DEFAULT_OUTPUT_FORMAT_MODE))
     output_format_mode = normalize_output_format_mode(row.get("output_format_mode", DEFAULT_OUTPUT_FORMAT_MODE))
@@ -2197,7 +2149,6 @@ def decision_from_row(
         true_peak_dbtp=true_peak,
         section_true_peak_dbtp=section_tp,
         bass_strength=bass_strength,
-        sub_strength=sub_strength,
         source_ext=source_ext,
         output_ext=output_ext,
         output_format_mode=output_format_mode,
@@ -2209,8 +2160,6 @@ def decision_from_row(
         bass_max_reduction_db=bass_max_reduction_db,
         bass_penalty_start_db=bass_penalty_start_db,
         bass_penalty_full_db=bass_penalty_full_db,
-        sub_penalty_start_db=sub_penalty_start_db,
-        sub_penalty_full_db=sub_penalty_full_db,
         bass_treatment=bass_treatment,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=not true_peak_unreliable,
@@ -2228,8 +2177,6 @@ def analyze_file(
     bass_max_reduction_db: float = DEFAULT_BASS_MAX_BOOST_REDUCTION_DB,
     bass_penalty_start_db: float = DEFAULT_BASS_PENALTY_START_DB,
     bass_penalty_full_db: float = DEFAULT_BASS_PENALTY_FULL_DB,
-    sub_penalty_start_db: float = DEFAULT_SUB_PENALTY_START_DB,
-    sub_penalty_full_db: float = DEFAULT_SUB_PENALTY_FULL_DB,
     bass_treatment: str = DEFAULT_BASS_TREATMENT,
     low_end_eq_max_db: float = DEFAULT_LOW_END_EQ_MAX_DB,
     low_end_eq_shelf_hz: float = DEFAULT_LOW_END_EQ_SHELF_HZ,
@@ -2293,8 +2240,7 @@ def analyze_file(
 
     warnings = ""
     bass_strength: float | None = None
-    sub_strength: float | None = None
-    with benchmark_timer("bass/sub analysis"):
+    with benchmark_timer("bass analysis"):
         try:
             bass_strength = measure_bass_strength_db(
                 audio=audio,
@@ -2305,26 +2251,13 @@ def analyze_file(
         except Exception as exc:
             warnings = append_note(warnings, f"bass analysis skipped: {exc}")
 
-        try:
-            sub_strength = measure_sub_strength_db(
-                audio=audio,
-                sample_rate=METER_SAMPLE_RATE,
-                start_sec=section_start,
-                end_sec=section_end,
-            )
-        except Exception as exc:
-            warnings = append_note(warnings, f"sub analysis skipped: {exc}")
-
     shelf_hz = clamp_low_end_eq_shelf_hz(low_end_eq_shelf_hz)
     low_end_eq_db = low_end_eq_cut_db(
         bass_strength,
-        sub_strength,
         bass_treatment=bass_treatment,
         low_end_eq_max_db=low_end_eq_max_db,
         bass_penalty_start_db=bass_penalty_start_db,
         bass_penalty_full_db=bass_penalty_full_db,
-        sub_penalty_start_db=sub_penalty_start_db,
-        sub_penalty_full_db=sub_penalty_full_db,
     )
     if low_end_eq_db > 0.01:
         try:
@@ -2375,7 +2308,6 @@ def analyze_file(
         true_peak_dbtp=true_peak_dbtp,
         section_true_peak_dbtp=section_true_peak_dbtp,
         bass_strength=bass_strength,
-        sub_strength=sub_strength,
         source_ext=ext,
         output_ext=output_ext,
         output_format_mode=output_format_mode,
@@ -2387,8 +2319,6 @@ def analyze_file(
         bass_max_reduction_db=bass_max_reduction_db,
         bass_penalty_start_db=bass_penalty_start_db,
         bass_penalty_full_db=bass_penalty_full_db,
-        sub_penalty_start_db=sub_penalty_start_db,
-        sub_penalty_full_db=sub_penalty_full_db,
         bass_treatment=bass_treatment,
         allow_risky_true_peak_boost=allow_risky_true_peak_boost,
         true_peak_measurements_present=bool(true_peak_measurements),
@@ -2446,7 +2376,6 @@ def analyze_file(
         "target_high_lufs": decision.target_high_lufs,
         "normalization_mode": decision.normalization_mode,
         "bass_strength_db": round_or_blank(bass_strength, 2),
-        "sub_strength_db": round_or_blank(sub_strength, 2),
         "bass_adjustment_db": decision.bass_adjustment_db,
         "low_end_eq_db": round_or_blank(low_end_eq_db, 2),
         "limiter_budget_db": decision.limiter_budget_db,

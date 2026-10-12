@@ -122,16 +122,15 @@ dBTP via native-rate decode, 4× polyphase oversampling, and peak detection on t
 Failed true-peak measurement blocks positive gain and flags manual review (overridable via **allow risky true-peak boost**).
 
 **Spectral band strength**  
-STFT band energy on the reference section only (48 kHz decode), each band expressed in dB relative to 115–1000 Hz:
+STFT band energy on the reference section only (48 kHz decode), expressed in dB relative to 400–8000 Hz:
 
-- 45–115 Hz (bass), half-open `[45, 115)`
-- 20–45 Hz (sub), half-open `[20, 45)`
+- 30–100 Hz (bass), half-open `[30, 100)`
 
-Hanning window; frame size `N = max(2048, min(16384, 2^floor(log2 n)))` for section length `n` samples; hop `N/2`; per-frame DC removal; band power = mean bin power over the band mask; strength = `10 * log10(median(band_power) / median(ref_power))` across frames (ratio cancels window/normalization constants between bands).
+Hanning window; frame size `N = max(2048, min(32768, 2^floor(log2 n)))` for section length `n` samples; hop `N/2`; per-frame DC removal; band power = sum of bin power over the band mask, accumulated across frames; strength = `10 * log10(band_power / ref_power)` (ratio cancels window/normalization constants between bands). Summing bins instead of averaging makes the value follow total band energy, so the pitch of a bassline inside the band does not change it.
 
-At 48 kHz with `N = 16384`, bin spacing is ~2.93 Hz (~8–9 bins in the sub band). Adequate for relative weighting; noisier when `N` shrinks on short sections.
+At 48 kHz with `N = 32768`, bin spacing is ~1.46 Hz (~48 bins in the bass band). Noisier when `N` shrinks on short sections.
 
-Band strength affects bass-aware gain trim only, not section selection. Reported per track as `bass_strength_db` / `sub_strength_db` (results table and CSV).
+Band strength affects bass-aware gain trim and Low-end EQ only, not section selection. Reported per track as `bass_strength_db` (results table and CSV).
 
 ### Gain decision
 
@@ -154,7 +153,9 @@ Mode-dependent peak for initial ceiling evaluation:
 If `peak_reference + gain` exceeds the dBTP ceiling, gain is clamped. No limiter is modeled.
 
 **4. Bass-aware trim**
-Ramp from band-strength thresholds: bass and sub each have a start/full dB pair (defaults +5/+17 dB for bass, +8/+17 dB for sub) mapped linearly to trim magnitude ρ ∈ [0, `bass_max_reduction`] (default 0.8 dB); ρ = max(ρ_bass, ρ_sub). All four thresholds and the cap are user-configurable in Preferences (Render Rules).
+Ramp from bass-strength thresholds: one start/full dB pair (defaults +7.5/+14 dB) mapped linearly to trim magnitude ρ ∈ [0, cap]; the cap is `bass_max_reduction` (default 0.8 dB) for Level trim and `low_end_eq_max` (default 6 dB) for Low-end EQ. Both thresholds and the caps are user-configurable in Preferences (Render Rules).
+
+With Low-end EQ, ρ is applied as a low-shelf cut (default corner 100 Hz) before loudness and true peak are re-measured, instead of as a gain trim.
 
 Applied to `suggested_gain` after steps 1–3 (clean-gain mode: peak ceiling clamp from step 3 is already included; limiter-assisted: step 3 skipped, so LUFS-mapped gain only):
 

@@ -577,8 +577,6 @@ class LibraryTuningPage(ctk.CTkFrame):
             low_end_eq_shelf_hz=settings.low_end_eq_shelf_hz,
             bass_penalty_start_db=settings.bass_penalty_start_db,
             bass_penalty_full_db=settings.bass_penalty_full_db,
-            sub_penalty_start_db=settings.sub_penalty_start_db,
-            sub_penalty_full_db=settings.sub_penalty_full_db,
             peak_ceiling_dbfs=settings.peak_ceiling_dbfs,
             normalization_mode=settings.normalization_mode,
             limiter_engine=settings.limiter_engine,

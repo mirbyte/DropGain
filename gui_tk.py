@@ -56,8 +56,6 @@ from analysis import (
     BASS_TREATMENT_LOW_END_EQ,
     DEFAULT_BASS_PENALTY_START_DB,
     DEFAULT_BASS_PENALTY_FULL_DB,
-    DEFAULT_SUB_PENALTY_START_DB,
-    DEFAULT_SUB_PENALTY_FULL_DB,
     MIN_BASS_PENALTY_THRESHOLD_DB,
     MAX_BASS_PENALTY_THRESHOLD_DB,
     DEFAULT_NORMALIZATION_MODE,
@@ -468,13 +466,13 @@ class App(WaveformMixin, ctk.CTk):
         if "low_end_eq_max" not in upgraded:
             upgraded["low_end_eq_max"] = DEFAULT_LOW_END_EQ_MAX_DB
         if previous_schema < 2:
-            old_thresholds = {
+            # v0.1.3 shipped these defaults for the old bass meter. Only untouched
+            # values move to the current defaults; a hand-set threshold stays.
+            old_bass_thresholds = {
                 "bass_penalty_start": (5.0, DEFAULT_BASS_PENALTY_START_DB),
                 "bass_penalty_full": (17.0, DEFAULT_BASS_PENALTY_FULL_DB),
-                "sub_penalty_start": (8.0, DEFAULT_SUB_PENALTY_START_DB),
-                "sub_penalty_full": (17.0, DEFAULT_SUB_PENALTY_FULL_DB),
             }
-            for key, (old_value, new_value) in old_thresholds.items():
+            for key, (old_value, new_value) in old_bass_thresholds.items():
                 if key not in upgraded:
                     continue
                 try:
@@ -483,6 +481,8 @@ class App(WaveformMixin, ctk.CTk):
                     continue
                 if abs(saved_threshold - old_value) < 0.001:
                     upgraded[key] = new_value
+        for key in ("sub_penalty_start", "sub_penalty_full"):
+            upgraded.pop(key, None)
         if "low_end_eq_shelf_hz" not in upgraded:
             upgraded["low_end_eq_shelf_hz"] = DEFAULT_LOW_END_EQ_SHELF_HZ
         else:
@@ -618,8 +618,6 @@ class App(WaveformMixin, ctk.CTk):
                 "bass_max_reduction": float(self.var_bass_max_reduction.get()),
                 "bass_penalty_start": float(self.var_bass_penalty_start.get()),
                 "bass_penalty_full": float(self.var_bass_penalty_full.get()),
-                "sub_penalty_start": float(self.var_sub_penalty_start.get()),
-                "sub_penalty_full": float(self.var_sub_penalty_full.get()),
                 "peak_ceiling": float(self.var_peak_ceiling.get()),
                 "normalization_mode": normalize_normalization_mode(self.var_normalization_mode.get()),
                 "limiter_engine": normalize_limiter_engine(self.var_limiter_engine.get()),
@@ -1448,12 +1446,6 @@ class App(WaveformMixin, ctk.CTk):
         self.var_bass_penalty_full = tk.DoubleVar(
             value=self._setting_float(settings, "bass_penalty_full", DEFAULT_BASS_PENALTY_FULL_DB)
         )
-        self.var_sub_penalty_start = tk.DoubleVar(
-            value=self._setting_float(settings, "sub_penalty_start", DEFAULT_SUB_PENALTY_START_DB)
-        )
-        self.var_sub_penalty_full = tk.DoubleVar(
-            value=self._setting_float(settings, "sub_penalty_full", DEFAULT_SUB_PENALTY_FULL_DB)
-        )
         self.var_peak_ceiling = tk.DoubleVar(value=self._setting_float(settings, "peak_ceiling", DEFAULT_BOOST_PEAK_CEILING_DBFS))
         self.var_mp3_threshold = tk.DoubleVar(value=self._setting_float(settings, "mp3_threshold", MP3_MIN_ABS_GAIN_DB))
         self.var_lossless_threshold = tk.DoubleVar(value=self._setting_float(settings, "lossless_threshold", LOSSLESS_MIN_ABS_GAIN_DB))
@@ -1877,8 +1869,6 @@ class App(WaveformMixin, ctk.CTk):
             self.var_low_end_eq_shelf_hz,
             self.var_bass_penalty_start,
             self.var_bass_penalty_full,
-            self.var_sub_penalty_start,
-            self.var_sub_penalty_full,
         ):
             var.trace_add("write", self._on_bass_setting_changed)
         self.var_apply_render_gain_threshold.trace_add("write", self._on_render_rule_setting_changed)
@@ -1912,8 +1902,6 @@ class App(WaveformMixin, ctk.CTk):
         low_end_eq_shelf_hz: float,
         bass_penalty_start_db: float,
         bass_penalty_full_db: float,
-        sub_penalty_start_db: float,
-        sub_penalty_full_db: float,
     ) -> dict[str, object]:
         signature: dict[str, object] = {
             "folder": cls._normalized_folder_signature(folder),
@@ -1927,8 +1915,6 @@ class App(WaveformMixin, ctk.CTk):
             signature["low_end_eq_shelf_hz"] = cls._rounded(low_end_eq_shelf_hz, 0)
             signature["bass_penalty_start_db"] = cls._rounded(bass_penalty_start_db)
             signature["bass_penalty_full_db"] = cls._rounded(bass_penalty_full_db)
-            signature["sub_penalty_start_db"] = cls._rounded(sub_penalty_start_db)
-            signature["sub_penalty_full_db"] = cls._rounded(sub_penalty_full_db)
         return signature
 
     def _current_analysis_signature(self) -> dict[str, object] | None:
@@ -1951,14 +1937,6 @@ class App(WaveformMixin, ctk.CTk):
                 bass_penalty_full_db=max(
                     MIN_BASS_PENALTY_THRESHOLD_DB,
                     min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_full.get())),
-                ),
-                sub_penalty_start_db=max(
-                    MIN_BASS_PENALTY_THRESHOLD_DB,
-                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_start.get())),
-                ),
-                sub_penalty_full_db=max(
-                    MIN_BASS_PENALTY_THRESHOLD_DB,
-                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
                 ),
             )
         except Exception:
@@ -1984,8 +1962,6 @@ class App(WaveformMixin, ctk.CTk):
             "low_end_eq_shelf_hz": "low-end EQ corner",
             "bass_penalty_start_db": "bass trim start",
             "bass_penalty_full_db": "bass trim full",
-            "sub_penalty_start_db": "sub trim start",
-            "sub_penalty_full_db": "sub trim full",
         }
         return [labels[key] for key in labels if current.get(key) != previous.get(key)]
 
@@ -2684,8 +2660,6 @@ class App(WaveformMixin, ctk.CTk):
             self.var_bass_max_reduction.set(DEFAULT_BASS_MAX_BOOST_REDUCTION_DB)
             self.var_bass_penalty_start.set(DEFAULT_BASS_PENALTY_START_DB)
             self.var_bass_penalty_full.set(DEFAULT_BASS_PENALTY_FULL_DB)
-            self.var_sub_penalty_start.set(DEFAULT_SUB_PENALTY_START_DB)
-            self.var_sub_penalty_full.set(DEFAULT_SUB_PENALTY_FULL_DB)
             self.var_peak_ceiling.set(DEFAULT_BOOST_PEAK_CEILING_DBFS)
             self.var_normalization_mode.set(DEFAULT_NORMALIZATION_MODE)
             self.var_limiter_engine.set(DEFAULT_LIMITER_ENGINE)
@@ -2896,14 +2870,6 @@ class App(WaveformMixin, ctk.CTk):
                 MIN_BASS_PENALTY_THRESHOLD_DB,
                 min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_full.get())),
             )
-            sub_penalty_start = max(
-                MIN_BASS_PENALTY_THRESHOLD_DB,
-                min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_start.get())),
-            )
-            sub_penalty_full = max(
-                MIN_BASS_PENALTY_THRESHOLD_DB,
-                min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
-            )
             bass_treatment = normalize_bass_treatment(self.var_bass_treatment.get())
             low_end_eq_max = max(
                 MIN_LOW_END_EQ_MAX_DB,
@@ -2948,8 +2914,6 @@ class App(WaveformMixin, ctk.CTk):
             low_end_eq_shelf_hz=low_end_eq_shelf_hz,
             bass_penalty_start_db=bass_penalty_start,
             bass_penalty_full_db=bass_penalty_full,
-            sub_penalty_start_db=sub_penalty_start,
-            sub_penalty_full_db=sub_penalty_full,
         )
 
         if pipeline == "review_render" and run_signature != self._analysis_signature:
@@ -3049,8 +3013,6 @@ class App(WaveformMixin, ctk.CTk):
                 bass_max_reduction,
                 bass_penalty_start,
                 bass_penalty_full,
-                sub_penalty_start,
-                sub_penalty_full,
                 bass_treatment,
                 low_end_eq_max,
                 low_end_eq_shelf_hz,
@@ -3141,8 +3103,6 @@ class App(WaveformMixin, ctk.CTk):
         bass_max_reduction: float,
         bass_penalty_start: float,
         bass_penalty_full: float,
-        sub_penalty_start: float,
-        sub_penalty_full: float,
         bass_treatment: str,
         low_end_eq_max: float,
         low_end_eq_shelf_hz: float,
@@ -3176,8 +3136,6 @@ class App(WaveformMixin, ctk.CTk):
                 bass_max_reduction_db=bass_max_reduction,
                 bass_penalty_start_db=bass_penalty_start,
                 bass_penalty_full_db=bass_penalty_full,
-                sub_penalty_start_db=sub_penalty_start,
-                sub_penalty_full_db=sub_penalty_full,
                 bass_treatment=bass_treatment,
                 low_end_eq_max_db=low_end_eq_max,
                 low_end_eq_shelf_hz=low_end_eq_shelf_hz,
@@ -3540,14 +3498,6 @@ class App(WaveformMixin, ctk.CTk):
                     MIN_BASS_PENALTY_THRESHOLD_DB,
                     min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_bass_penalty_full.get())),
                 ),
-                sub_penalty_start_db=max(
-                    MIN_BASS_PENALTY_THRESHOLD_DB,
-                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_start.get())),
-                ),
-                sub_penalty_full_db=max(
-                    MIN_BASS_PENALTY_THRESHOLD_DB,
-                    min(MAX_BASS_PENALTY_THRESHOLD_DB, float(self.var_sub_penalty_full.get())),
-                ),
                 bass_treatment=normalize_bass_treatment(self.var_bass_treatment.get()),
                 low_end_eq_max_db=max(
                     MIN_LOW_END_EQ_MAX_DB,
@@ -3591,7 +3541,6 @@ class App(WaveformMixin, ctk.CTk):
             self._format_dbtp(row.get("projected_true_peak_dbtp")),
             self._limiting_label(row),
             self._format_db(row.get("bass_strength_db")),
-            self._format_db(row.get("sub_strength_db")),
             self._status_display(row),
             self._row_warnings_text(row),
         )
