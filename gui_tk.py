@@ -1600,7 +1600,7 @@ class App(WaveformMixin, ctk.CTk):
             text="",
             fg_color="transparent",
             text_color=FG_MUTED,
-            font=self._ui_accent_font(TYPE_LABEL),
+            font=self._ui_accent_font(TYPE_CAPTION),
             anchor="sw",
         )
 
