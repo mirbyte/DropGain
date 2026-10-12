@@ -343,6 +343,7 @@ class DropGainTooltip:
         self._last_root_x = 0
         self._last_root_y = 0
         self._bind_recursive(widget)
+        widget.winfo_toplevel().bind("<Unmap>", self._on_owner_unmap, add="+")
 
     def _bind_recursive(self, widget: tk.Widget) -> None:
         for sequence, callback in (
@@ -379,6 +380,12 @@ class DropGainTooltip:
             self.widget.after(80, self._hide_if_pointer_left)
         except Exception:
             self._hide()
+
+    def _on_owner_unmap(self, event: tk.Event) -> None:
+        if event.widget is not self.widget.winfo_toplevel():
+            return
+        self._cancel_schedule()
+        self._hide()
 
     def _remember_pointer(self, event: tk.Event) -> None:
         try:
@@ -431,6 +438,9 @@ class DropGainTooltip:
             return
 
         try:
+            owner = self.widget.winfo_toplevel()
+            if str(owner.state()) == "iconic" or not owner.winfo_viewable():
+                return
             if not self.widget.winfo_exists() or not self._pointer_inside_widget():
                 return
         except Exception:
