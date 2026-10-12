@@ -220,8 +220,9 @@ def run_pyinstaller() -> None:
         str(ROOT / "assets" / "icon.ico"),
         "--add-data",
         f"fonts{os.pathsep}fonts",
+        # Window icon only. Do not add the assets folder; assets/temp is local scratch.
         "--add-data",
-        f"assets{os.pathsep}assets",
+        f"{ROOT / 'assets' / 'icon.ico'}{os.pathsep}assets",
         "--collect-all",
         "customtkinter",
         "--collect-all",
@@ -247,7 +248,7 @@ def _copy_license_files(src_dir: Path, dest_dir: Path) -> None:
             or name_upper.startswith("LICENSE")
             or path.suffix.lower() in {".txt", ".md"}
         ):
-            if path.name.upper() == "README.TXT":
+            if path.name.upper() in {"README.TXT", "README.DROPGAIN.TXT"}:
                 continue
             shutil.copy2(path, dest_dir / path.name)
 
