@@ -157,7 +157,7 @@ If `peak_reference + gain` exceeds the dBTP ceiling, gain is clamped. No limiter
 **4. Bass-aware trim**
 Ramp from bass-strength thresholds: one start/full dB pair (defaults +7.5/+14 dB) mapped linearly to trim magnitude ρ ∈ [0, cap]; the cap is `bass_max_reduction` (default 0.8 dB) for Level trim and `low_end_eq_max` (default 6 dB) for Low-end EQ. Both thresholds and the caps are user-configurable in Preferences (Render Rules).
 
-With Low-end EQ, ρ is applied as a low-shelf cut (default corner 100 Hz) before loudness and true peak are re-measured, instead of as a gain trim.
+With Low-end EQ, ρ is applied as a low-shelf cut (default corner 80 Hz) before loudness and true peak are re-measured, instead of as a gain trim.
 
 Applied to `suggested_gain` after steps 1–3 (clean-gain mode: peak ceiling clamp from step 3 is already included; limiter-assisted: step 3 skipped, so LUFS-mapped gain only):
 

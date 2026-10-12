@@ -1129,7 +1129,7 @@ class PreferencesPage(ctk.CTkFrame):
             integer=True,
             tooltip=(
                 "Halfway point of the low shelf. "
-                "At 100 Hz, a 6 dB cut is about 5.6 dB at 50 Hz, 3 dB at 100 Hz, and about 1 dB at 150 Hz.\n"
+                "At 80 Hz, a 6 dB cut is about 5.2 dB at 50 Hz, 3 dB at 80 Hz, and about 1 dB at 120 Hz.\n"
                 "Changing this requires a new analysis."
             ),
         )

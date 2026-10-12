@@ -136,7 +136,7 @@ DEFAULT_BASS_TREATMENT = BASS_TREATMENT_LOW_END_EQ
 
 # Minimum-phase RBJ low shelf. S=1 is the steepest monotonic shelf (second order).
 # The corner is the halfway point of the shelf, not the frequency of the full cut.
-DEFAULT_LOW_END_EQ_SHELF_HZ = 100.0
+DEFAULT_LOW_END_EQ_SHELF_HZ = 80.0
 MIN_LOW_END_EQ_SHELF_HZ = 20.0
 MAX_LOW_END_EQ_SHELF_HZ = 200.0
 LOW_END_EQ_SHELF_SLOPE = 1.0
