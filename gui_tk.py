@@ -132,7 +132,6 @@ from gui_utils import (  # noqa: F401
     scaled_px,
     scaled_px_from_float,
     telemetry_caption,
-    telemetry_plain,
     treeview_column_width_px,
     treeview_rowheight_px,
     ui_scale_for,
@@ -216,8 +215,9 @@ class App(WaveformMixin, ctk.CTk):
         self._operation_started_at: float | None = None
         self._operation_elapsed_after_id: str | None = None
         self._operation_last_rate = 0.0
-        self._operation_last_eta = ""
+        self._operation_last_eta: float | None = None
         self._operation_last_errors = 0
+        self._operation_phase_started_at = 0.0
         self._progress_target = 0.0
         self._progress_display = 0.0
         self._progress_tween_after_id: str | None = None
@@ -851,14 +851,14 @@ class App(WaveformMixin, ctk.CTk):
 
     def _configure_results_table_tags(self) -> None:
         row_styles: tuple[tuple[str, str, str], ...] = (
-            ("odd", TABLE_ROW_ODD, FG_MAIN),
-            ("even", TABLE_ROW_EVEN, FG_MAIN),
             ("odd_warn", TABLE_ROW_ODD, WARN_FG),
             ("even_warn", TABLE_ROW_EVEN, WARN_FG),
             ("odd_error", TABLE_ROW_ODD, ERROR_FG),
             ("even_error", TABLE_ROW_EVEN, ERROR_FG),
             ("odd_ok", TABLE_ROW_ODD, SUCCESS_FG),
             ("even_ok", TABLE_ROW_EVEN, SUCCESS_FG),
+            ("odd_muted", TABLE_ROW_ODD, FG_MUTED),
+            ("even_muted", TABLE_ROW_EVEN, FG_MUTED),
         )
         for tag_name, background, foreground in row_styles:
             self.results_table.tag_configure(tag_name, background=background, foreground=foreground)
@@ -867,27 +867,17 @@ class App(WaveformMixin, ctk.CTk):
                 background=TABLE_SELECTION_BG,
                 foreground=foreground,
             )
+        # Muted text on the selection background is below readable contrast.
+        for tag_name in ("odd_muted_selected", "even_muted_selected"):
+            self.results_table.tag_configure(tag_name, foreground=FG_MAIN)
 
     def _should_show_results_operation_overlay(self) -> bool:
-        if not self._analyzed_rows:
-            return True
-        return self._active_phase == "render" and self._is_run_busy()
+        return not self._analyzed_rows
 
     def _refresh_results_empty_message(self) -> None:
         if not hasattr(self, "var_results_empty"):
             return
         if not self._should_show_results_operation_overlay():
-            return
-        if self._is_run_busy():
-            if self._operation_started_at is not None:
-                message = self._operation_stats_text(
-                    self._operation_last_rate,
-                    self._operation_last_eta,
-                    self._operation_last_errors,
-                )
-            else:
-                message = telemetry_plain(self.var_status.get()) or RESULTS_EMPTY_PLACEHOLDER
-            self.var_results_empty.set(message)
             return
         self.var_results_empty.set(RESULTS_EMPTY_PLACEHOLDER)
 
@@ -2364,7 +2354,11 @@ class App(WaveformMixin, ctk.CTk):
 
     def _set_operation_phase_display(self, text: str) -> None:
         if hasattr(self, "var_operation_phase"):
-            self.var_operation_phase.set(telemetry_caption(text))
+            dots = ""
+            if self._active_phase in {"analyze", "render"} and not self._cancel_flag.is_set():
+                phase_seconds = int(time.monotonic() - self._operation_phase_started_at)
+                dots = "." * (phase_seconds % 4)
+            self.var_operation_phase.set(telemetry_caption(text) + dots)
 
     def _set_telemetry_status(self, text: str) -> None:
         if hasattr(self, "var_status"):
@@ -2378,7 +2372,11 @@ class App(WaveformMixin, ctk.CTk):
             "analyze": "Analyzing library",
             "render": "Rendering copies",
         }
-        return labels.get(self._active_phase, "Working")
+        label = labels.get(self._active_phase, "Working")
+        if self._active_pipeline == "batch" and self._active_phase in {"analyze", "render"}:
+            stage = 1 if self._active_phase == "analyze" else 2
+            return f"Stage {stage}/2 · {label}"
+        return label
 
     def _operation_fraction_text(self) -> str:
         if self._active_phase == "idle":
@@ -2451,7 +2449,10 @@ class App(WaveformMixin, ctk.CTk):
     @staticmethod
     def _format_elapsed_duration(seconds: float) -> str:
         total = max(int(seconds), 0)
-        minutes, secs = divmod(total, 60)
+        hours, rest = divmod(total, 3600)
+        minutes, secs = divmod(rest, 60)
+        if hours > 0:
+            return f"{hours}h {minutes}m"
         if minutes > 0:
             return f"{minutes}m {secs}s"
         return f"{secs}s"
@@ -2461,14 +2462,37 @@ class App(WaveformMixin, ctk.CTk):
             return 0.0
         return max(time.monotonic() - self._operation_started_at, 0.0)
 
-    def _operation_stats_text(self, rate: float, eta: str, errors: int) -> str:
+    def _eta_text(self, seconds: float | None, *, estimate: bool = False) -> str:
+        if seconds is None:
+            return "ETA pending"
+        suffix = " (est.)" if estimate else ""
+        return f"~{self._format_elapsed_duration(seconds)} left{suffix}"
+
+    def _batch_job_eta_seconds(self, stage_eta: float | None) -> float | None:
+        if self._active_phase != "analyze" or stage_eta is None:
+            return stage_eta
+        # Render count is unknown until analysis ends; project it from the would-process ratio so far.
+        would_ratio = self._run_counts.get("would_process", 0) / max(self._progress_done, 1)
+        projected_render_seconds = self._progress_total * would_ratio / self._operation_last_rate
+        return stage_eta + projected_render_seconds
+
+    def _operation_stats_text(self, rate: float, eta: float | None, errors: int) -> str:
         elapsed = self._format_elapsed_duration(self._operation_elapsed_seconds())
         if self._cancel_flag.is_set() and self._is_run_busy():
             return f"{elapsed} elapsed · finishing current track(s)"
-        if self._active_phase in {"analyze", "render"}:
-            error_label = "error" if errors == 1 else "errors"
-            return f"{rate:.1f} tracks/s · {elapsed} elapsed · ~{eta} left · {errors} {error_label}"
-        return f"{elapsed} elapsed"
+        if self._active_phase not in {"analyze", "render"}:
+            return f"{elapsed} elapsed"
+        error_label = "error" if errors == 1 else "errors"
+        parts = [f"{rate * 60:.1f} tracks/min"]
+        if self._active_pipeline == "batch":
+            job_eta = self._batch_job_eta_seconds(eta)
+            parts.append(f"stage {self._eta_text(eta)}")
+            parts.append("job " + self._eta_text(job_eta, estimate=self._active_phase == "analyze"))
+        else:
+            parts.append(self._eta_text(eta))
+        parts.append(f"{errors} {error_label}")
+        parts.append(f"{elapsed} elapsed")
+        return " · ".join(parts)
 
     def _cancel_operation_elapsed_refresh(self) -> None:
         if self._operation_elapsed_after_id is None:
@@ -2484,23 +2508,28 @@ class App(WaveformMixin, ctk.CTk):
         if self._active_phase == "idle":
             return
         self._refresh_operation_elapsed()
-        self._operation_elapsed_after_id = self.after(1000, self._schedule_operation_elapsed_refresh)
+        # Re-anchor to the phase start so callback latency does not accumulate across ticks.
+        phase_elapsed = time.monotonic() - self._operation_phase_started_at
+        delay_ms = int((1.0 - phase_elapsed % 1.0) * 1000) + 1
+        self._operation_elapsed_after_id = self.after(delay_ms, self._schedule_operation_elapsed_refresh)
 
     def _refresh_operation_elapsed(self) -> None:
         if not hasattr(self, "var_status") or self._active_phase == "idle":
             return
         if self._operation_started_at is None:
             return
-        self._set_telemetry_status(
-            self._operation_stats_text(
-                self._operation_last_rate,
-                self._operation_last_eta,
-                self._operation_last_errors,
-            )
+        stats = self._operation_stats_text(
+            self._operation_last_rate,
+            self._operation_last_eta,
+            self._operation_last_errors,
         )
+        self._set_telemetry_status(stats)
+        self.var_operation_stats.set(stats)
+        if not self._cancel_flag.is_set():
+            self._set_operation_phase_display(self._operation_phase_label())
         self._refresh_results_empty_message()
 
-    def _refresh_operation_display(self, rate: float = 0.0, eta: str = "", errors: int = 0) -> None:
+    def _refresh_operation_display(self, rate: float = 0.0, eta: float | None = None, errors: int = 0) -> None:
         if not hasattr(self, "var_operation_phase"):
             return
         if self._active_phase == "idle":
@@ -2538,7 +2567,7 @@ class App(WaveformMixin, ctk.CTk):
         self._batch_render_done = 0
         self._operation_started_at = None
         self._operation_last_rate = 0.0
-        self._operation_last_eta = ""
+        self._operation_last_eta = None
         self._operation_last_errors = 0
         self._cancel_operation_elapsed_refresh()
         self._restore_busy_button_label()
@@ -2547,6 +2576,7 @@ class App(WaveformMixin, ctk.CTk):
         if hasattr(self, "var_operation_phase"):
             self._set_operation_phase_display(self._operation_phase_label())
             self.var_operation_fraction.set("")
+            self.var_operation_stats.set("")
         self._set_progress_bars(0.0, immediate=True)
         self._update_metric_phase_highlight()
         self.title(APP_WINDOW_TITLE)
@@ -2563,9 +2593,9 @@ class App(WaveformMixin, ctk.CTk):
         self._batch_analysis_done = 0
         self._batch_render_total = 0
         self._batch_render_done = 0
-        self._operation_started_at = time.monotonic()
+        self._operation_started_at = self._operation_phase_started_at = time.monotonic()
         self._operation_last_rate = 0.0
-        self._operation_last_eta = ""
+        self._operation_last_eta = None
         self._operation_last_errors = 0
         self._set_busy_button_label(pipeline)
         self._update_busy_button_label()
@@ -2581,6 +2611,12 @@ class App(WaveformMixin, ctk.CTk):
 
     def _set_active_phase(self, phase: str) -> None:
         leaving_preflight = self._active_phase == "preflight" and phase != "preflight"
+        if phase != self._active_phase:
+            self._operation_last_rate = 0.0
+            self._operation_last_eta = None
+            self._operation_last_errors = 0
+            self._operation_phase_started_at = time.monotonic()
+            self._schedule_operation_elapsed_refresh()
         self._active_phase = phase
         if leaving_preflight:
             self._set_progress_indeterminate(False)
@@ -2601,6 +2637,8 @@ class App(WaveformMixin, ctk.CTk):
         self._batch_render_done = 0
         self._progress_done = 0
         self._progress_total = max(self._batch_render_total, 1)
+        self._analyzed_rows = list(info["rows"])
+        self._populate_results_table(self._analyzed_rows, select_first=False)
         self._set_active_phase("render")
 
     def _on_progress_tick(self, data: object) -> None:
@@ -2620,7 +2658,7 @@ class App(WaveformMixin, ctk.CTk):
         self._run_counts = dict(counts)
         self.var_run_summary.set(self._format_run_counts(self._run_counts))
         self._update_summary_cards()
-        self._refresh_operation_display(float(rate), str(eta), int(errors))
+        self._refresh_operation_display(float(rate), float(eta), int(errors))
 
     def _set_progress_max(self, maximum: int) -> None:
         self._set_progress_indeterminate(False)
@@ -3221,6 +3259,12 @@ class App(WaveformMixin, ctk.CTk):
                             self._set_active_phase(str(data))
                         elif kind == "batch_phase":
                             self._on_batch_phase(data)
+                        elif kind == "render_queue":
+                            for index in data:  # type: ignore[attr-defined]
+                                self.results_table.set(str(index), "status", "● Queued")
+                        elif kind == "render_row":
+                            index, state = data  # type: ignore[misc]
+                            self._refresh_results_row(int(index), str(state))
                         elif kind == "progress_max":
                             self._set_progress_max(max(int(data), 1))
                         elif kind == "summary_counts":
@@ -3419,9 +3463,9 @@ class App(WaveformMixin, ctk.CTk):
             return "error"
         if App._status_category(row) == "Warning":
             return "warn"
-        if App._status_category(row) in {"Ready", "Already OK", "Processed"}:
+        if App._status_category(row) == "Processed":
             return "ok"
-        return ""
+        return "muted"
 
     @staticmethod
     def _limiting_label(row: dict[str, object]) -> str:
@@ -3549,8 +3593,7 @@ class App(WaveformMixin, ctk.CTk):
     def _results_table_tags_for_index(index: int, row: dict[str, object]) -> tuple[str, ...]:
         stripe_tag = "odd" if index % 2 else "even"
         severity = App._row_status_severity(row)
-        row_tag = f"{stripe_tag}_{severity}" if severity else stripe_tag
-        return (row_tag,)
+        return (f"{stripe_tag}_{severity}",)
 
     def _schedule_resize_results_table_columns(self) -> None:
         self._schedule_debounced(
@@ -3603,7 +3646,7 @@ class App(WaveformMixin, ctk.CTk):
             self.results_table.focus(first_item)
             self._sync_results_table_selection_appearance()
 
-    def _populate_results_table(self, rows: list[dict[str, object]]) -> None:
+    def _populate_results_table(self, rows: list[dict[str, object]], *, select_first: bool = True) -> None:
         self.results_table.delete(*self.results_table.get_children())
         self._clear_waveform_preview()
         self._update_results_empty_state(has_rows=bool(rows))
@@ -3620,7 +3663,7 @@ class App(WaveformMixin, ctk.CTk):
         self._schedule_resize_results_table_columns()
 
         children = self.results_table.get_children()
-        if children:
+        if children and select_first:
             first_item = str(children[0])
             self.results_table.selection_set(first_item)
             self.results_table.focus(first_item)
@@ -3628,6 +3671,20 @@ class App(WaveformMixin, ctk.CTk):
             self._queue_waveform_for_item(first_item)
         else:
             self._sync_results_table_selection_appearance()
+
+    def _refresh_results_row(self, index: int, state: str) -> None:
+        iid = str(index)
+        if state == "rendering":
+            self.results_table.set(iid, "status", "● Rendering")
+            return
+        row = self._analyzed_rows[index]
+        base_tag = self._results_table_tags_for_index(index, row)[0]
+        selected = iid in self.results_table.selection()
+        self.results_table.item(
+            iid,
+            values=self._results_table_values_for_row(row),
+            tags=(self._results_row_display_tag(base_tag, selected=selected),),
+        )
 
     def _flush_pending_settings_save(self) -> None:
         if self._save_settings_after_id is not None:

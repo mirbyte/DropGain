@@ -475,6 +475,7 @@ class ProcessPage(ctk.CTkFrame):
 
         app.var_operation_phase = tk.StringVar(value=telemetry_caption("Ready"))
         app.var_operation_fraction = tk.StringVar(value="")
+        app.var_operation_stats = tk.StringVar(value="")
         app._label(
             header_row,
             textvariable=app.var_operation_phase,
@@ -494,6 +495,15 @@ class ProcessPage(ctk.CTkFrame):
             anchor="e",
             mono=True,
         ).grid(row=0, column=1, sticky="e")
+        app._label(
+            header_row,
+            textvariable=app.var_operation_stats,
+            color=FG_MUTED,
+            bg=BG_MAIN,
+            size=TYPE_BODY,
+            anchor="e",
+            mono=True,
+        ).grid(row=0, column=2, sticky="e", padx=(12, 0))
 
         app.progress = ctk.CTkProgressBar(
             progress_frame,

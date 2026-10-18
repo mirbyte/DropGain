@@ -80,7 +80,7 @@ class JobProgressTicker:
         completed: int,
         errors: int,
         run_counts: dict[str, int],
-    ) -> tuple[int, int, float, str, int, dict[str, int]]:
+    ) -> tuple[int, int, float, float, int, dict[str, int]]:
         now = time.time()
         elapsed = max(now - self.started_at, 0.001)
         rate = completed / elapsed
@@ -108,10 +108,9 @@ class JobProgressTicker:
         else:
             eta_seconds = 0.0
 
-        eta = f"{int(eta_seconds // 60)}m {int(eta_seconds % 60)}s"
         snapshot = dict(run_counts)
         snapshot["errors"] = errors
-        return completed, self.total, rate, eta, errors, snapshot
+        return completed, self.total, rate, eta_seconds, errors, snapshot
 
 
 @dataclass
@@ -455,7 +454,7 @@ def run_analysis_job(
 
     progress = JobProgressTicker(started_at, total)
 
-    def tick() -> tuple[int, int, float, str, int, dict[str, int]]:
+    def tick() -> tuple[int, int, float, float, int, dict[str, int]]:
         return progress.snapshot(completed, errors, run_counts)
 
     def process_one(path: str) -> None:
@@ -748,6 +747,7 @@ def run_batch_job(
             {
                 "analysis_total": len(rows),
                 "render_total": len(render_indices),
+                "rows": rows,
             },
         )
         rows = run_processing_job(
@@ -887,6 +887,9 @@ def run_processing_job(
             on_progress("finished", settings.csv_path if (settings.write_csv and os.path.exists(settings.csv_path)) else None)
         return all_rows
 
+    row_index_by_id = {id(row): index for index, row in enumerate(all_rows)}
+    on_progress("render_queue", [row_index_by_id[id(row)] for row in rows_to_process])
+
     if settings.write_csv:
         output_dir = os.path.dirname(os.path.abspath(settings.csv_path))
         if output_dir:
@@ -914,7 +917,7 @@ def run_processing_job(
 
     progress = JobProgressTicker(started_at, total)
 
-    def tick() -> tuple[int, int, float, str, int, dict[str, int]]:
+    def tick() -> tuple[int, int, float, float, int, dict[str, int]]:
         return progress.snapshot(completed, errors, run_counts)
 
     def render_one(row: TrackRow) -> None:
@@ -924,6 +927,8 @@ def run_processing_job(
             return
 
         path = row["path"]
+        index = row_index_by_id[id(row)]
+        on_progress("render_row", (index, "rendering"))
 
         try:
             source_info = _resolve_render_source_info(path, cached_work_items)
@@ -992,6 +997,7 @@ def run_processing_job(
                     f"{filename}"
                 )
                 on_progress("tick", tick())
+                on_progress("render_row", (index, "done"))
 
         except Exception as exc:
             with write_lock:
@@ -1005,6 +1011,7 @@ def run_processing_job(
                     f"{os.path.basename(path)} - {exc}"
                 )
                 on_progress("tick", tick())
+                on_progress("render_row", (index, "done"))
 
     csv_handle = None
     writer = None
